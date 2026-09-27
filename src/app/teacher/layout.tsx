@@ -25,7 +25,7 @@ export default async function TeacherLayout({ children }: { children: React.Reac
           { href: "/teacher/stats", label: "成绩统计" },
         ]}
       />
-      <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-7xl px-4 py-6 has-[.lesson-full]:max-w-none">{children}</main>
     </>
   );
 }
