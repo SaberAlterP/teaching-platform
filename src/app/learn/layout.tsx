@@ -6,7 +6,7 @@ export default async function LearnLayout({ children }: { children: React.ReactN
   return (
     <>
       <TopNav name={u.name} role="STUDENT" links={[{ href: "/learn", label: "我的课程" }, { href: "/learn/grades", label: "我的成绩" }]} />
-      <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-7xl px-4 py-6 has-[.lesson-full]:max-w-none">{children}</main>
     </>
   );
 }

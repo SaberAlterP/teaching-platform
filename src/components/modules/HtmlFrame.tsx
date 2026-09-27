@@ -78,8 +78,8 @@ export function HtmlFrame({
         ref={frame}
         src={src}
         onLoad={() => setLoaded(true)}
-        // 全屏时铺满屏幕；平时用老师设置的高度，但不超过窗口高度
-        style={full ? { height: "100%" } : { height, maxHeight: "calc(100vh - 96px)" }}
+        // 全屏时铺满屏幕；平时按宽屏比例尽量占满一屏（至少是老师设置的高度），但不超过窗口高度
+        style={full ? { height: "100%" } : { height: `max(${height}px, min(56vw, 100vh - 160px))`, maxHeight: "calc(100vh - 110px)" }}
         className="block w-full"
         // 不给 allow-same-origin：包内代码拿不到平台 Cookie，也不能调用平台接口
         sandbox="allow-scripts allow-pointer-lock allow-popups allow-forms allow-modals allow-downloads"

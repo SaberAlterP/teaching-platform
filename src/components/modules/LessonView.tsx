@@ -46,39 +46,26 @@ export function LessonView({
 
   const pct = modules.length ? Math.round((completed.size / modules.length) * 100) : 0;
 
+  const activeIndex = Math.max(0, modules.findIndex((m) => m.id === active));
+
   return (
-    <div className="grid gap-6 lg:grid-cols-[200px_1fr]">
-      <aside className="hidden lg:block">
-        <div className="sticky top-20 space-y-3">
-          <div className="card p-4">
-            <div className="mb-2 text-xs text-slate-500">本课进度 {pct}%</div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-              <div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${pct}%` }} />
-            </div>
-          </div>
-          <nav className="card max-h-[70vh] overflow-auto p-2 text-sm">
-            {modules.map((m, i) => (
-              <a
-                key={m.id}
-                href={`#m-${m.id}`}
-                className={`flex items-start gap-2 rounded-md px-2 py-1.5 leading-5 ${active === m.id ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-50"}`}
-              >
-                <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] ${completed.has(m.id) ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-500"}`}>
-                  {completed.has(m.id) ? "✓" : i + 1}
-                </span>
-                <span className="line-clamp-2">{m.title || MODULE_LABELS[m.type]}</span>
-              </a>
-            ))}
-          </nav>
-        </div>
-      </aside>
+    <div className="lesson-full mx-auto max-w-[1800px]">
+      <header className="mb-4">
+        <h1 className="text-2xl font-bold sm:text-3xl">{title}</h1>
+        {summary && <p className="mt-1.5 text-slate-500">{summary}</p>}
+      </header>
 
-      <div className="min-w-0 space-y-6">
-        <header>
-          <h1 className="text-3xl font-bold">{title}</h1>
-          {summary && <p className="mt-2 text-slate-500">{summary}</p>}
-        </header>
+      {modules.length > 0 && (
+        <ProgressBar
+          modules={modules}
+          completed={completed}
+          active={active}
+          activeIndex={activeIndex}
+          pct={pct}
+        />
+      )}
 
+      <div className="mt-4 space-y-5">
         {modules.map((m, i) => (
           <Section key={m.id} m={m} onVisible={() => setActive(m.id)} onSeen={() => (m.type === "RICHTEXT" || m.type === "MEDIA" || (m.type === "HTML" && !(m.data as unknown as HtmlData).scored)) && done(m.id)}>
             <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -86,7 +73,7 @@ export function LessonView({
               {m.title && <h2 className="text-lg font-bold">{m.title}</h2>}
               {completed.has(m.id) && <span className="text-sm text-emerald-500">✓ 已完成</span>}
             </div>
-            {m.type === "RICHTEXT" && <Markdown>{(m.data as unknown as RichTextData).markdown}</Markdown>}
+            {m.type === "RICHTEXT" && <Markdown className="max-w-5xl">{(m.data as unknown as RichTextData).markdown}</Markdown>}
             {m.type === "MEDIA" && <MediaView data={m.data as unknown as MediaData} />}
             {m.type === "QUIZ" && (
               <QuizView
@@ -129,6 +116,72 @@ export function LessonView({
   );
 }
 
+// 顶部细进度栏：平时只占一行，点"目录"展开环节列表
+function ProgressBar({
+  modules, completed, active, activeIndex, pct,
+}: {
+  modules: ViewModule[];
+  completed: Set<string>;
+  active?: string;
+  activeIndex: number;
+  pct: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", esc); };
+  }, [open]);
+  const cur = modules[activeIndex];
+
+  return (
+    <div ref={box} className="sticky top-14 z-20 -mx-4 border-b border-slate-200 bg-[#f5f7fb]/90 px-4 backdrop-blur">
+      <div className="flex h-11 items-center gap-3 text-sm">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className={`btn-outline shrink-0 px-3 py-1 ${open ? "border-brand-500 text-brand-700" : ""}`}
+        >
+          ☰ 目录
+        </button>
+        <span className="min-w-0 truncate text-slate-600">
+          <span className="text-slate-400">第 {activeIndex + 1}/{modules.length} 个环节 · </span>
+          {cur?.title || (cur && MODULE_LABELS[cur.type])}
+        </span>
+        <span className="ml-auto hidden shrink-0 text-slate-500 sm:inline">已完成 {completed.size}/{modules.length}</span>
+        <div className="hidden h-1.5 w-40 shrink-0 overflow-hidden rounded-full bg-slate-200 sm:block">
+          <div className={`h-full rounded-full transition-all ${pct === 100 ? "bg-emerald-500" : "bg-brand-500"}`} style={{ width: `${pct}%` }} />
+        </div>
+        <span className="ml-auto shrink-0 text-slate-500 sm:hidden">{pct}%</span>
+      </div>
+      {open && (
+        <nav className="card absolute top-full left-4 mt-1 max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] overflow-auto p-2 text-sm shadow-lg">
+          {modules.map((m, i) => (
+            <a
+              key={m.id}
+              href={`#m-${m.id}`}
+              onClick={() => setOpen(false)}
+              className={`flex items-start gap-2 rounded-md px-2 py-2 leading-5 ${active === m.id ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-50"}`}
+            >
+              <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] ${completed.has(m.id) ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-500"}`}>
+                {completed.has(m.id) ? "✓" : i + 1}
+              </span>
+              <span>
+                {m.title || MODULE_LABELS[m.type]}
+                <span className="ml-1.5 text-xs text-slate-400">{MODULE_LABELS[m.type]}</span>
+              </span>
+            </a>
+          ))}
+        </nav>
+      )}
+    </div>
+  );
+}
+
 function Section({ m, children, onVisible, onSeen }: { m: ViewModule; children: React.ReactNode; onVisible: () => void; onSeen: () => void }) {
   const ref = useRef<HTMLElement>(null);
   const cbs = useRef({ onVisible, onSeen });
@@ -151,7 +204,7 @@ function Section({ m, children, onVisible, onSeen }: { m: ViewModule; children: 
     return () => { io.disconnect(); if (timer) clearTimeout(timer); };
   }, []);
   return (
-    <section ref={ref} id={`m-${m.id}`} className={`card scroll-mt-20 ${m.type === "HTML" ? "p-3 sm:p-4" : "p-6"}`}>
+    <section ref={ref} id={`m-${m.id}`} className={`card scroll-mt-28 ${m.type === "HTML" ? "p-3 sm:p-4" : "p-6"}`}>
       {children}
     </section>
   );
