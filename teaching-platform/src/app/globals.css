@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #eef6ff;
+  --color-brand-100: #d9eaff;
+  --color-brand-500: #2f6fed;
+  --color-brand-600: #1f5ad4;
+  --color-brand-700: #1a48a8;
+  --font-sans: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, -apple-system, sans-serif;
+}
+
+body {
+  background: #f5f7fb;
+  color: #1c2433;
+}
+
+@layer components {
+  .btn, .btn-primary, .btn-ghost, .btn-outline, .btn-danger {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary { @apply bg-brand-500 text-white hover:bg-brand-600; }
+  .btn-ghost { @apply text-slate-600 hover:bg-slate-100; }
+  .btn-outline { @apply border border-slate-300 bg-white text-slate-700 hover:bg-slate-50; }
+  .btn-danger { @apply text-red-600 hover:bg-red-50; }
+  .card { @apply rounded-xl border border-slate-200 bg-white shadow-sm; }
+  .input, .select {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100;
+  }
+  .label { @apply mb-1 block text-sm font-medium text-slate-700; }
+  .badge { @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium; }
+}
+
+/* Markdown 渲染样式 */
+.prose-tp { line-height: 1.8; font-size: 1rem; }
+.prose-tp h1 { font-size: 1.6rem; font-weight: 700; margin: 1.2em 0 .6em; }
+.prose-tp h2 { font-size: 1.3rem; font-weight: 700; margin: 1.2em 0 .5em; }
+.prose-tp h3 { font-size: 1.1rem; font-weight: 600; margin: 1em 0 .4em; }
+.prose-tp p { margin: .6em 0; }
+.prose-tp ul { list-style: disc; padding-left: 1.5em; margin: .5em 0; }
+.prose-tp ol { list-style: decimal; padding-left: 1.5em; margin: .5em 0; }
+.prose-tp blockquote { border-left: 4px solid #c7d7f5; background: #f3f7ff; padding: .5em 1em; margin: .8em 0; color: #3b4a63; border-radius: 0 8px 8px 0; }
+.prose-tp code { background: #eef1f6; padding: .1em .35em; border-radius: 4px; font-size: .9em; }
+.prose-tp pre { background: #1e2533; color: #e6e9ef; padding: 1em; border-radius: 8px; overflow-x: auto; }
+.prose-tp pre code { background: none; padding: 0; }
+.prose-tp table { border-collapse: collapse; margin: .8em 0; width: 100%; font-size: .95em; }
+.prose-tp th, .prose-tp td { border: 1px solid #dde3ec; padding: .45em .7em; text-align: left; }
+.prose-tp th { background: #f3f6fa; font-weight: 600; }
+.prose-tp img { max-width: 100%; border-radius: 8px; }
+.prose-tp a { color: #2f6fed; text-decoration: underline; }
+.prose-tp > :first-child { margin-top: 0; }
