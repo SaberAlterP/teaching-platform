@@ -43,7 +43,7 @@ parent.postMessage({ type: "tp:complete" }, "*");
 
 ## 用 AI 生成内容
 
-可以直接在和 Claude 的对话里描述需求，例如：
+可以直接在和 AI 的对话里描述需求，例如：
 
 > 做一个单文件 HTML 小游戏：学生扮演仓库管理员，……，结束时调用 `parent.postMessage({ type: "tp:score", score, max: 100 }, "*")` 上报成绩。不要使用 localStorage，不要依赖外部 CDN。
 
