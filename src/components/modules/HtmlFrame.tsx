@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 
 // 在沙箱 iframe 里运行 HTML 包。
-// 包里的页面可以用 postMessage 与平台通信（见 docs/html-package.md）：
+// 包里的页面可以用 postMessage 与平台通信（见 README）：
 //   parent.postMessage({ type: "tp:score", score: 80, max: 100, detail: {...} }, "*")  上报成绩
 //   parent.postMessage({ type: "tp:complete" }, "*")                                 标记完成
 export type FrameMessage =
