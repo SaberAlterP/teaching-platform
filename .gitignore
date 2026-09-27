@@ -1,0 +1,28 @@
+# 依赖
+node_modules/
+
+# Next.js 构建产物
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# 环境变量（只提交 env.production.example）
+.env
+.env.*
+
+# 本地上传文件
+data/
+
+# 日志
+npm-debug.log*
+*.log
+
+# 系统和编辑器
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# 本机推送脚本
+推送到GitHub.bat
