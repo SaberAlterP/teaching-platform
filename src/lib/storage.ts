@@ -1,11 +1,18 @@
 import "server-only";
 import path from "path";
 import fs from "fs/promises";
+import { createWriteStream } from "fs";
+import { Readable, Transform } from "stream";
+import { pipeline } from "stream/promises";
 import JSZip from "jszip";
+import { eq, lt, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 
 export const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR ?? "./data/uploads");
-export const MAX_FILE = 200 * 1024 * 1024; // 单文件 200MB
+export const MAX_FILE = 200 * 1024 * 1024; // 图片/视频单文件 200MB（边收边写硬盘，不占内存）
+export const MAX_PACKAGE = 100 * 1024 * 1024; // HTML 包 100MB（zip 解压需要读进内存）
+const MAX_UNZIPPED = 500 * 1024 * 1024; // zip 解压后总大小上限，防止"压缩炸弹"
+const TMP_DIR = path.join(UPLOAD_DIR, ".tmp");
 
 export function assetDir(id: string) {
   if (!/^[A-Za-z0-9_-]+$/.test(id)) throw new Error("bad id");
@@ -19,56 +26,115 @@ export function safeJoin(base: string, rel: string) {
   return p;
 }
 
-export async function saveFile(file: File) {
-  if (file.size > MAX_FILE) throw new Error("文件超过 200MB");
-  const [row] = await db
-    .insert(schema.assets)
-    .values({ kind: "file", filename: file.name, mime: file.type || guessMime(file.name), size: file.size, entry: "file" })
-    .returning();
-  const dir = assetDir(row.id);
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(path.join(dir, "file"), Buffer.from(await file.arrayBuffer()));
-  return row;
+// 把上传的数据流直接写到临时文件，超过大小限制立即中止
+async function receive(body: ReadableStream<Uint8Array>, limit: number) {
+  await fs.mkdir(TMP_DIR, { recursive: true });
+  const tmp = path.join(TMP_DIR, `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  let size = 0;
+  const counter = new Transform({
+    transform(chunk: Buffer, _enc, cb) {
+      size += chunk.length;
+      if (size > limit) cb(new Error(`文件超过 ${Math.round(limit / 1024 / 1024)}MB`));
+      else cb(null, chunk);
+    },
+  });
+  try {
+    await pipeline(Readable.fromWeb(body as import("stream/web").ReadableStream), counter, createWriteStream(tmp));
+  } catch (e) {
+    await fs.rm(tmp, { force: true });
+    throw e;
+  }
+  return { tmp, size };
+}
+
+export async function saveFile(body: ReadableStream<Uint8Array>, filename: string, mime: string) {
+  const { tmp, size } = await receive(body, MAX_FILE);
+  try {
+    const [row] = await db
+      .insert(schema.assets)
+      .values({ kind: "file", filename, mime: mime && mime !== "application/octet-stream" ? mime : guessMime(filename), size, entry: "file" })
+      .returning();
+    const dir = assetDir(row.id);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.rename(tmp, path.join(dir, "file"));
+    return row;
+  } finally {
+    await fs.rm(tmp, { force: true });
+  }
 }
 
 // HTML 包：单个 .html 文件，或包含 index.html 的 .zip
-export async function savePackage(file: File) {
-  if (file.size > MAX_FILE) throw new Error("文件超过 200MB");
-  const buf = Buffer.from(await file.arrayBuffer());
-  const lower = file.name.toLowerCase();
-  const files: { rel: string; data: Buffer }[] = [];
-  let entry = "index.html";
+export async function savePackage(body: ReadableStream<Uint8Array>, filename: string) {
+  const lower = filename.toLowerCase();
+  const isHtml = lower.endsWith(".html") || lower.endsWith(".htm");
+  if (!isHtml && !lower.endsWith(".zip")) throw new Error("请上传 .html 文件或 .zip 压缩包");
+  const { tmp, size } = await receive(body, MAX_PACKAGE);
+  let dir = "";
+  try {
+    if (isHtml) {
+      const row = await insertPackage(filename, size, "index.html");
+      dir = assetDir(row.id);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.rename(tmp, path.join(dir, "index.html"));
+      return row;
+    }
 
-  if (lower.endsWith(".html") || lower.endsWith(".htm")) {
-    files.push({ rel: "index.html", data: buf });
-  } else if (lower.endsWith(".zip")) {
-    const zip = await JSZip.loadAsync(buf);
+    const zip = await JSZip.loadAsync(await fs.readFile(tmp));
     const names = Object.keys(zip.files).filter((n) => !zip.files[n].dir && !n.startsWith("__MACOSX/"));
     // 如果 zip 里整体包了一层文件夹，自动去掉
     const prefix = commonPrefix(names);
-    for (const n of names) {
-      const rel = n.slice(prefix.length);
-      if (!rel || rel.includes("..")) continue;
-      files.push({ rel, data: await zip.files[n].async("nodebuffer") });
-    }
-    const htmls = files.map((f) => f.rel).filter((r) => /\.html?$/i.test(r));
-    entry = htmls.find((r) => r.toLowerCase() === "index.html") ?? htmls.sort((a, b) => a.length - b.length)[0];
+    const entries = names
+      .map((n) => ({ n, rel: n.slice(prefix.length) }))
+      .filter((x) => x.rel && !x.rel.includes(".."));
+    const htmls = entries.map((x) => x.rel).filter((r) => /\.html?$/i.test(r));
+    const entry = htmls.find((r) => r.toLowerCase() === "index.html") ?? htmls.sort((a, b) => a.length - b.length)[0];
     if (!entry) throw new Error("zip 包里没有找到 html 文件");
-  } else {
-    throw new Error("请上传 .html 文件或 .zip 压缩包");
-  }
 
+    const row = await insertPackage(filename, size, entry);
+    dir = assetDir(row.id);
+    // 一个一个解压写盘，内存里同时只放一个文件
+    let total = 0;
+    for (const x of entries) {
+      const data = await zip.files[x.n].async("nodebuffer");
+      total += data.length;
+      if (total > MAX_UNZIPPED) throw new Error("zip 解压后太大（超过 500MB）");
+      const p = safeJoin(dir, x.rel);
+      await fs.mkdir(path.dirname(p), { recursive: true });
+      await fs.writeFile(p, data);
+    }
+    return row;
+  } catch (e) {
+    // 失败时把已经写了一半的包删掉（数据库记录没有模块引用，会被自动清理）
+    if (dir) await fs.rm(dir, { recursive: true, force: true });
+    throw e;
+  } finally {
+    await fs.rm(tmp, { force: true });
+  }
+}
+
+async function insertPackage(filename: string, size: number, entry: string) {
   const [row] = await db
     .insert(schema.assets)
-    .values({ kind: "package", filename: file.name, mime: "text/html", size: file.size, entry })
+    .values({ kind: "package", filename, mime: "text/html", size, entry })
     .returning();
-  const dir = assetDir(row.id);
-  for (const f of files) {
-    const p = safeJoin(dir, f.rel);
-    await fs.mkdir(path.dirname(p), { recursive: true });
-    await fs.writeFile(p, f.data);
-  }
   return row;
+}
+
+// 清理没有任何模块再引用的上传文件（删除模块/课时、替换图片视频后留下的）。
+// 只删上传超过 1 小时的，避免误删老师刚上传、还没保存进模块的文件。
+// 注意：课时删除后，它导出的 JSON 里引用的文件也会被清理，重新导入后需要重新上传。
+export async function cleanupOrphanAssets() {
+  const cutoff = new Date(Date.now() - 60 * 60 * 1000);
+  const old = await db.select({ id: schema.assets.id }).from(schema.assets).where(lt(schema.assets.createdAt, cutoff));
+  if (!old.length) return 0;
+  const rows = await db.select({ data: sql<string>`${schema.modules.data}::text` }).from(schema.modules);
+  const all = rows.map((r) => r.data).join("\n");
+  const orphans = old.filter((a) => !all.includes(a.id));
+  for (const a of orphans) {
+    await db.delete(schema.assets).where(eq(schema.assets.id, a.id));
+    await fs.rm(assetDir(a.id), { recursive: true, force: true });
+  }
+  return orphans.length;
 }
 
 function commonPrefix(names: string[]) {

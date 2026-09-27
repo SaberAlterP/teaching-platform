@@ -3,11 +3,12 @@ export type UploadResult = { id: string; filename: string; mime: string; url: st
 
 export function uploadFile(file: File, kind: "file" | "package", onProgress?: (p: number) => void): Promise<UploadResult> {
   return new Promise((resolve, reject) => {
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("kind", kind);
+    const limitMb = kind === "package" ? 100 : 200;
+    if (file.size > limitMb * 1024 * 1024) return reject(new Error(`文件超过 ${limitMb}MB`));
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/upload");
+    // 直接发送文件本身，服务器边收边存
+    xhr.open("POST", `/api/upload?kind=${kind}&name=${encodeURIComponent(file.name)}`);
+    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
     xhr.onload = () => {
       try {
@@ -19,6 +20,6 @@ export function uploadFile(file: File, kind: "file" | "package", onProgress?: (p
       }
     };
     xhr.onerror = () => reject(new Error("网络错误，上传失败"));
-    xhr.send(fd);
+    xhr.send(file);
   });
 }
