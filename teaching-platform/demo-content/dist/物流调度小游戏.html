@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>物流调度中心</title>
+<style>
+  :root { --brand: #2f6fed; --ink: #0f172a; --muted: #64748b; --line: #e2e8f0; --good: #16a34a; --bad: #dc2626; --warn: #d97706; }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; color: var(--ink); background: #f1f5f9; padding: 16px; }
+  .top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .top h1 { font-size: 20px; }
+  .pill { background: #fff; border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 13px; }
+  .pill b { color: var(--brand); }
+  .grow { flex: 1; }
+  .btn { border: 0; border-radius: 10px; padding: 9px 18px; font-size: 14px; font-weight: 600; cursor: pointer; background: var(--brand); color: #fff; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.ghost { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+  .orders { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+  .order { background: #fff; border-radius: 14px; border: 1px solid var(--line); padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .order .h { display: flex; align-items: center; gap: 8px; }
+  .order .emoji { font-size: 26px; }
+  .order .name { font-weight: 700; }
+  .order .route { font-size: 13px; color: var(--muted); }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+  .tags span { background: #f1f5f9; border-radius: 6px; padding: 2px 7px; }
+  .tags .hot { background: #fee2e2; color: var(--bad); }
+  .modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .mode { border: 2px solid var(--line); background: #fff; border-radius: 10px; padding: 6px 2px; cursor: pointer; text-align: center; font-size: 12px; line-height: 1.35; }
+  .mode .i { font-size: 18px; }
+  .mode.sel { border-color: var(--brand); background: #eef4ff; }
+  .mode:disabled { opacity: .35; cursor: not-allowed; }
+  .mode small { display: block; color: var(--muted); }
+  .late { color: var(--bad) !important; font-weight: 600; }
+  .result { font-size: 13px; border-radius: 8px; padding: 8px 10px; }
+  .result.ok { background: #dcfce7; }
+  .result.no { background: #fee2e2; }
+  .track { height: 6px; background: #e2e8f0; border-radius: 99px; overflow: hidden; }
+  .track div { height: 100%; width: 0; background: var(--brand); transition: width 1.2s ease; }
+  .panel { background: #fff; border-radius: 14px; border: 1px solid var(--line); padding: 20px; max-width: 640px; margin: 20px auto; }
+  .panel h2 { margin-bottom: 8px; }
+  .panel p, .panel li { line-height: 1.8; color: #334155; font-size: 14px; }
+  .panel ul { padding-left: 20px; margin: 8px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0; }
+  th, td { padding: 6px; border-bottom: 1px solid var(--line); text-align: left; }
+  th { color: var(--muted); }
+  .big { font-size: 44px; font-weight: 800; color: var(--brand); }
+  .money.pos { color: var(--good); } .money.neg { color: var(--bad); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+// ====== 规则参数（为教学而简化的虚拟数值）======
+const MODES = {
+  road:  { name: "公路", icon: "🚚", speed: 60,  handle: 2,  rate: 0.45, fixed: 300 },
+  rail:  { name: "铁路", icon: "🚆", speed: 45,  handle: 14, rate: 0.14, fixed: 1600, minWeight: 0 },
+  water: { name: "水路", icon: "🚢", speed: 22,  handle: 30, rate: 0.05, fixed: 3000 },
+  air:   { name: "航空", icon: "✈️", speed: 650, handle: 6,  rate: 3.2,  fixed: 900, maxWeight: 30 },
+};
+// 城市：是否有港口 / 铁路 / 机场
+const CITY = {
+  上海: { port: 1, rail: 1, air: 1 }, 武汉: { port: 1, rail: 1, air: 1 }, 重庆: { port: 1, rail: 1, air: 1 },
+  北京: { port: 0, rail: 1, air: 1 }, 广州: { port: 1, rail: 1, air: 1 }, 成都: { port: 0, rail: 1, air: 1 },
+  苏州: { port: 0, rail: 1, air: 0 }, 西安: { port: 0, rail: 1, air: 1 }, 大同: { port: 0, rail: 1, air: 0 },
+  天津: { port: 1, rail: 1, air: 1 }, 昆明: { port: 0, rail: 1, air: 1 }, 杭州: { port: 0, rail: 1, air: 1 },
+};
+const ROUNDS = [
+  { title: "第 1 天 · 熟悉业务", orders: [
+    { id: "a1", emoji: "📦", name: "电商日用品", from: "上海", to: "苏州", km: 100, t: 8, deadline: 12, fee: 1800 },
+    { id: "a2", emoji: "🪨", name: "动力煤", from: "大同", to: "天津", km: 450, t: 3000, deadline: 72, fee: 330000 },
+    { id: "a3", emoji: "💊", name: "急需疫苗", from: "北京", to: "昆明", km: 2600, t: 2, deadline: 12, fee: 26000, perishable: 1 },
+  ]},
+  { title: "第 2 天 · 大宗与时效", orders: [
+    { id: "b1", emoji: "🌾", name: "散装粮食", from: "武汉", to: "上海", km: 1100, t: 5000, deadline: 120, fee: 520000 },
+    { id: "b2", emoji: "🍒", name: "空运樱桃", from: "西安", to: "广州", km: 1600, t: 5, deadline: 24, fee: 32000, perishable: 1 },
+    { id: "b3", emoji: "🧱", name: "建材", from: "成都", to: "西安", km: 700, t: 600, deadline: 60, fee: 110000 },
+    { id: "b4", emoji: "🛋️", name: "家具", from: "杭州", to: "上海", km: 180, t: 12, deadline: 10, fee: 2600 },
+  ]},
+  { title: "第 3 天 · 综合考验", orders: [
+    { id: "c1", emoji: "📱", name: "手机新品", from: "广州", to: "北京", km: 2100, t: 15, deadline: 20, fee: 150000, perishable: 1 },
+    { id: "c2", emoji: "🚗", name: "整车出口", from: "重庆", to: "上海", km: 1700, t: 2000, deadline: 200, fee: 390000 },
+    { id: "c3", emoji: "🥬", name: "新鲜蔬菜", from: "成都", to: "重庆", km: 300, t: 20, deadline: 10, fee: 9000, perishable: 1 },
+    { id: "c4", emoji: "⚙️", name: "机械零件", from: "天津", to: "西安", km: 1100, t: 300, deadline: 60, fee: 110000 },
+  ]},
+];
+
+function available(o, m) {
+  const a = CITY[o.from], b = CITY[o.to];
+  if (m === "water") return a.port && b.port ? "" : "无港口";
+  if (m === "air") return !(a.air && b.air) ? "无机场" : o.t > MODES.air.maxWeight ? "超重" : "";
+  if (m === "rail") return a.rail && b.rail ? "" : "无铁路";
+  return "";
+}
+function plan(o, m) {
+  const M = MODES[m];
+  const km = m === "water" ? o.km * 1.15 : m === "air" ? o.km * 0.85 : o.km; // 水路绕行、航空直线
+  const hours = km / M.speed + M.handle;
+  const cost = Math.round(M.fixed + M.rate * o.t * km);
+  const late = hours > o.deadline;
+  const penalty = late ? Math.round(o.fee * (o.perishable ? 1 : 0.3)) : 0;
+  return { hours, cost, late, penalty, profit: o.fee - cost - penalty };
+}
+function best(o) {
+  return Math.max(...Object.keys(MODES).filter((m) => !available(o, m)).map((m) => plan(o, m).profit));
+}
+
+// ====== 状态 ======
+let round = -1, choice = {}, results = [], revealed = false;
+const app = document.getElementById("app");
+const fmt = (n) => (n < 0 ? "-" : "") + "¥" + Math.abs(n).toLocaleString("zh-CN");
+const hrs = (h) => (h >= 48 ? (h / 24).toFixed(1) + " 天" : Math.round(h) + " 小时");
+
+function intro() {
+  app.innerHTML = `
+  <div class="panel">
+    <h2>🏭 物流调度中心</h2>
+    <p>你是一家物流公司的调度员。接下来 <b>3 天</b>，每天都会收到几张运输订单，你要为每张订单选择运输方式：</p>
+    <ul>
+      <li>每种方式的<b>速度、成本</b>不同，有的城市没有港口或机场；航空限重 30 吨。</li>
+      <li>订单都有<b>时限</b>：超时要扣 30% 运费；<b>生鲜/药品</b>超时会整单赔付。</li>
+      <li>目标：三天总<b>利润</b>尽可能高。每张订单按"你的利润 ÷ 该单最优利润"计分，最后取平均。</li>
+    </ul>
+    <p style="color:#64748b;font-size:13px">小提示：选择方式时卡片上会显示预计时间和成本，好好比较。</p>
+    <div style="margin-top:14px"><button class="btn" onclick="next()">开始第 1 天</button></div>
+  </div>`;
+}
+
+function next() {
+  round++;
+  choice = {};
+  revealed = false;
+  if (round >= ROUNDS.length) return finish();
+  render();
+}
+
+function render() {
+  const R = ROUNDS[round];
+  const total = results.reduce((a, r) => a + r.profit, 0);
+  app.innerHTML = `
+  <div class="top">
+    <h1>${R.title}</h1>
+    <span class="pill">第 <b>${round + 1}</b> / ${ROUNDS.length} 天</span>
+    <span class="pill">累计利润 <b class="money ${total < 0 ? "neg" : ""}">${fmt(total)}</b></span>
+    <span class="grow"></span>
+    ${revealed
+      ? `<button class="btn" onclick="next()">${round + 1 < ROUNDS.length ? "进入下一天 →" : "查看结算 →"}</button>`
+      : `<button class="btn" id="go" onclick="dispatch()" ${R.orders.every((o) => choice[o.id]) ? "" : "disabled"}>全部发车 🚀</button>`}
+  </div>
+  <div class="orders">${R.orders.map(orderCard).join("")}</div>`;
+}
+
+function orderCard(o) {
+  const sel = choice[o.id];
+  const p = sel ? plan(o, sel) : null;
+  const modes = Object.entries(MODES).map(([k, M]) => {
+    const na = available(o, k);
+    const pl = na ? null : plan(o, k);
+    return `<button class="mode ${sel === k ? "sel" : ""}" ${na || revealed ? "disabled" : ""} onclick="pick('${o.id}','${k}')">
+      <div class="i">${M.icon}</div>${M.name}
+      <small class="${pl && pl.late ? "late" : ""}">${na || hrs(pl.hours)}</small>
+      <small>${na ? "" : fmt(pl.cost)}</small>
+    </button>`;
+  }).join("");
+  let res = "";
+  if (revealed && p) {
+    res = `<div class="track"><div id="tr-${o.id}"></div></div>
+      <div class="result ${p.late ? "no" : "ok"}">
+        ${p.late ? `⏰ 超时 ${hrs(p.hours - o.deadline)}，${o.perishable ? "货物损毁，整单赔付" : "扣罚 30% 运费"}` : "✅ 准时送达"}
+        · 利润 <b class="money ${p.profit < 0 ? "neg" : "pos"}">${fmt(p.profit)}</b>
+      </div>`;
+  }
+  return `<div class="order">
+    <div class="h"><span class="emoji">${o.emoji}</span><div><div class="name">${o.name}</div>
+      <div class="route">${o.from} → ${o.to} · ${o.km.toLocaleString()} 公里</div></div></div>
+    <div class="tags"><span>${o.t.toLocaleString()} 吨</span><span>时限 ${hrs(o.deadline)}</span><span>运费 ${fmt(o.fee)}</span>${o.perishable ? '<span class="hot">易腐/紧急</span>' : ""}</div>
+    <div class="modes">${modes}</div>
+    ${res}
+  </div>`;
+}
+
+function pick(id, m) { choice[id] = m; render(); }
+
+function dispatch() {
+  revealed = true;
+  const R = ROUNDS[round];
+  for (const o of R.orders) {
+    const p = plan(o, choice[o.id]);
+    results.push({ round, order: o, mode: choice[o.id], ...p, best: best(o) });
+  }
+  render();
+  requestAnimationFrame(() => setTimeout(() => {
+    for (const o of R.orders) {
+      const el = document.getElementById("tr-" + o.id);
+      const p = plan(o, choice[o.id]);
+      if (el) { el.style.width = "100%"; el.style.background = p.late ? "var(--bad)" : "var(--good)"; }
+    }
+  }, 50));
+}
+
+function finish() {
+  const profit = results.reduce((a, r) => a + r.profit, 0);
+  const optimal = results.reduce((a, r) => a + r.best, 0);
+  const onTime = results.filter((r) => !r.late).length;
+  // 每张订单同等权重：该单利润 ÷ 该单最优利润（亏损记 0），再取平均
+  const score = Math.round(100 * results.reduce((a, r) => a + Math.max(0, Math.min(1, r.profit / r.best)), 0) / results.length);
+  // 把成绩发给平台（在平台里打开时会记入成绩）
+  parent.postMessage({ type: "tp:score", score, max: 100, detail: { profit, optimal, onTime, total: results.length, choices: results.map((r) => [r.order.id, r.mode]) } }, "*");
+
+  const rows = results.map((r) => {
+    const bestModes = Object.keys(MODES).filter((m) => !available(r.order, m) && plan(r.order, m).profit === r.best).map((m) => MODES[m].name);
+    const ok = r.profit === r.best;
+    return `<tr><td>${r.order.emoji} ${r.order.name}</td><td>${MODES[r.mode].name}${r.late ? ' <span class="late">超时</span>' : ""}</td>
+      <td class="money ${r.profit < 0 ? "neg" : ""}">${fmt(r.profit)}</td><td>${ok ? "✅" : "💡 " + bestModes.join("/")}</td></tr>`;
+  }).join("");
+  app.innerHTML = `
+  <div class="panel">
+    <h2>📊 三天结算</h2>
+    <div style="display:flex;align-items:baseline;gap:12px"><span class="big">${score}</span><span>分 / 100</span></div>
+    <p>总利润 <b class="money ${profit < 0 ? "neg" : "pos"}">${fmt(profit)}</b>（理论最优 ${fmt(optimal)}），准时率 ${onTime}/${results.length}。</p>
+    <table><tr><th>订单</th><th>你的选择</th><th>利润</th><th>最优方式</th></tr>${rows}</table>
+    <p style="font-size:13px;color:#64748b">想一想：哪些订单"便宜但慢"的方式反而亏了？哪些订单值得花大价钱走航空？</p>
+    <div style="margin-top:12px;display:flex;gap:8px"><button class="btn" onclick="restart()">再玩一次</button></div>
+  </div>`;
+}
+
+function restart() { round = -1; results = []; next(); }
+intro();
+</script>
+</body>
+</html>
