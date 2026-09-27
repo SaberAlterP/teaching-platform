@@ -16,7 +16,7 @@ body {
 
 @layer components {
   .btn, .btn-primary, .btn-ghost, .btn-outline, .btn-danger {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-primary { @apply bg-brand-500 text-white hover:bg-brand-600; }
   .btn-ghost { @apply text-slate-600 hover:bg-slate-100; }
@@ -45,6 +45,17 @@ body {
 .prose-tp table { border-collapse: collapse; margin: .8em 0; width: 100%; font-size: .95em; }
 .prose-tp th, .prose-tp td { border: 1px solid #dde3ec; padding: .45em .7em; text-align: left; }
 .prose-tp th { background: #f3f6fa; font-weight: 600; }
-.prose-tp img { max-width: 100%; border-radius: 8px; }
+.prose-tp img { max-width: 100%; max-height: 70vh; border-radius: 8px; }
+.prose-tp td > p, .prose-tp th > p { margin: 0; }
 .prose-tp a { color: #2f6fed; text-decoration: underline; }
 .prose-tp > :first-child { margin-top: 0; }
+
+/* 图文编辑器 */
+.rte-content p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: #9aa6b8; float: left; height: 0; pointer-events: none; }
+.rte-content img { cursor: default; }
+.rte-content img.ProseMirror-selectednode { outline: 3px solid #2f6fed; }
+.rte-content table { table-layout: fixed; }
+.rte-content td, .rte-content th { position: relative; vertical-align: top; }
+.rte-content .selectedCell::after { content: ""; position: absolute; inset: 0; background: rgba(47, 111, 237, .12); pointer-events: none; }
+.prose-tp hr { border: 0; border-top: 2px solid #e2e8f0; margin: 1.2em 0; }
+.rte-content hr.ProseMirror-selectednode { border-top-color: #2f6fed; }

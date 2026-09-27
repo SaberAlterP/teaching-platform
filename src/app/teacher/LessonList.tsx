@@ -34,9 +34,9 @@ export function LessonList({ lessons: initial }: { lessons: L[] }) {
 
   return (
     <section>
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <h2 className="text-lg font-bold">课时</h2>
-        <span className="text-sm text-slate-400">拖动左侧把手可调整顺序</span>
+        <span className="hidden text-sm text-slate-400 sm:inline">拖动左侧把手可调整顺序</span>
         <div className="ml-auto flex gap-2">
           <input ref={fileRef} type="file" accept=".json" hidden onChange={(e) => e.target.files?.[0] && onImport(e.target.files[0])} />
           <button className="btn-outline" onClick={() => fileRef.current?.click()}>导入课时</button>
@@ -63,11 +63,11 @@ export function LessonList({ lessons: initial }: { lessons: L[] }) {
               onDragStart={() => setDrag(i)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => onDrop(i)}
-              className={`card flex items-center gap-3 p-4 transition ${drag === i ? "opacity-40" : ""}`}
+              className={`card flex flex-wrap items-center gap-3 p-4 transition ${drag === i ? "opacity-40" : ""}`}
             >
               <span className="cursor-grab select-none text-slate-300" title="拖动排序">⋮⋮</span>
               <span className="w-8 text-center text-sm font-semibold text-slate-400">{i + 1}</span>
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 basis-48">
                 <div className="flex items-center gap-2">
                   <Link href={`/teacher/lessons/${l.id}`} className="truncate font-semibold hover:text-brand-600">
                     {l.title}
