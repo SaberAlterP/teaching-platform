@@ -1,8 +1,8 @@
 # ---------- 构建 ----------
 FROM node:22-alpine AS builder
 WORKDIR /app
-# 国内服务器拉取 npm 包较慢时，可取消下一行注释使用镜像源
-# RUN npm config set registry https://registry.npmmirror.com
+# 使用国内 npm 镜像源（海外服务器可删掉下一行）
+RUN npm config set registry https://registry.npmmirror.com
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
