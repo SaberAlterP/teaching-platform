@@ -49,7 +49,7 @@ export const enrollments = pgTable(
     userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     classId: text("class_id").notNull().references(() => classes.id, { onDelete: "cascade" }),
   },
-  (t) => [primaryKey({ columns: [t.userId, t.classId] })],
+  (t) => [primaryKey({ columns: [t.userId, t.classId] }), index("enrollments_class_idx").on(t.classId)],
 );
 
 export const lessons = pgTable(
@@ -101,7 +101,11 @@ export const submissions = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex("submissions_user_module").on(t.userId, t.moduleId)],
+  (t) => [
+    uniqueIndex("submissions_user_module").on(t.userId, t.moduleId),
+    // 按模块查作答（统计、批改、重新判分）
+    index("submissions_module_idx").on(t.moduleId),
+  ],
 );
 
 // 学习进度：学生完成了哪些模块
@@ -112,7 +116,7 @@ export const moduleProgress = pgTable(
     moduleId: text("module_id").notNull().references(() => modules.id, { onDelete: "cascade" }),
     completedAt: createdAt(),
   },
-  (t) => [primaryKey({ columns: [t.userId, t.moduleId] })],
+  (t) => [primaryKey({ columns: [t.userId, t.moduleId] }), index("module_progress_module_idx").on(t.moduleId)],
 );
 
 // 上传的文件：普通文件（图片、视频）或 HTML 包（解压后的目录）
