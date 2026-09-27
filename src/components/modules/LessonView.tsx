@@ -24,6 +24,7 @@ export function LessonView({
   results,
   htmlScores,
   preview,
+  backHref,
 }: {
   title: string;
   summary: string;
@@ -32,6 +33,7 @@ export function LessonView({
   results: Record<string, QuizResult>;
   htmlScores: Record<string, { score: number; maxScore: number }>;
   preview?: boolean;
+  backHref?: string;
 }) {
   const [completed, setCompleted] = useState(new Set(initialCompleted));
   const [scores, setScores] = useState(htmlScores);
@@ -59,12 +61,12 @@ export function LessonView({
               <a
                 key={m.id}
                 href={`#m-${m.id}`}
-                className={`flex items-center gap-2 rounded-md px-2 py-1.5 ${active === m.id ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-50"}`}
+                className={`flex items-start gap-2 rounded-md px-2 py-1.5 leading-5 ${active === m.id ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-50"}`}
               >
                 <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] ${completed.has(m.id) ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-500"}`}>
                   {completed.has(m.id) ? "✓" : i + 1}
                 </span>
-                <span className="truncate">{m.title || MODULE_LABELS[m.type]}</span>
+                <span className="line-clamp-2">{m.title || MODULE_LABELS[m.type]}</span>
               </a>
             ))}
           </nav>
@@ -77,14 +79,13 @@ export function LessonView({
           {summary && <p className="mt-2 text-slate-500">{summary}</p>}
         </header>
 
-        {modules.map((m) => (
+        {modules.map((m, i) => (
           <Section key={m.id} m={m} onVisible={() => setActive(m.id)} onSeen={() => (m.type === "RICHTEXT" || m.type === "MEDIA" || (m.type === "HTML" && !(m.data as unknown as HtmlData).scored)) && done(m.id)}>
-            {m.title && (
-              <h2 className="mb-3 flex items-center gap-2 text-lg font-bold">
-                {m.title}
-                {completed.has(m.id) && <span className="text-sm text-emerald-500">✓</span>}
-              </h2>
-            )}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className="badge bg-brand-50 text-brand-700">{i + 1} · {MODULE_LABELS[m.type]}</span>
+              {m.title && <h2 className="text-lg font-bold">{m.title}</h2>}
+              {completed.has(m.id) && <span className="text-sm text-emerald-500">✓ 已完成</span>}
+            </div>
             {m.type === "RICHTEXT" && <Markdown>{(m.data as unknown as RichTextData).markdown}</Markdown>}
             {m.type === "MEDIA" && <MediaView data={m.data as unknown as MediaData} />}
             {m.type === "QUIZ" && (
@@ -118,8 +119,9 @@ export function LessonView({
 
         {modules.length === 0 && <div className="card p-10 text-center text-slate-400">这节课还没有内容</div>}
         {modules.length > 0 && (
-          <div className="py-8 text-center text-sm text-slate-400">
-            {pct === 100 ? "🎉 本课内容已全部完成" : "— 本课结束 —"}
+          <div className="flex flex-col items-center gap-3 py-8 text-center text-sm text-slate-500">
+            {pct === 100 ? "🎉 本课内容已全部完成" : `— 本课结束，已完成 ${completed.size}/${modules.length} 个环节 —`}
+            {backHref && <a href={backHref} className="btn-outline">返回课程列表</a>}
           </div>
         )}
       </div>

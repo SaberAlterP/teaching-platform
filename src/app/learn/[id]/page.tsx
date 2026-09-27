@@ -14,7 +14,7 @@ export default async function StudentLessonPage({ params }: { params: Promise<{ 
   return (
     <div>
       <Link href="/learn" className="mb-4 inline-block text-sm text-slate-500 hover:text-brand-600">← 返回课程</Link>
-      <LessonView title={lesson.title} summary={lesson.summary} {...v} />
+      <LessonView title={lesson.title} summary={lesson.summary} {...v} backHref="/learn" />
     </div>
   );
 }

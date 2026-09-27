@@ -25,7 +25,7 @@ export function CourseHeader(p: { title: string; description: string; className:
       </form>
     );
   return (
-    <div className="card flex flex-wrap items-start gap-4 p-5">
+    <div className="card flex flex-wrap items-start gap-4 border-l-4 border-l-brand-500 p-5">
       <div className="min-w-0 flex-1">
         <h1 className="text-2xl font-bold">{p.title}</h1>
         {p.description && <p className="mt-1 text-slate-500">{p.description}</p>}
