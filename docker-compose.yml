@@ -1,10 +1,20 @@
 # 一键部署：docker compose up -d --build
 # 首次部署后执行一次初始化（创建教师账号和示范课）：
 #   docker compose exec app node scripts/seed.mjs
+
+# 日志最多保留 3 个 10MB 的文件，防止日志把硬盘占满
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *logging
+    mem_limit: 512m # 内存上限，异常时不会拖垮整台服务器
     environment:
       POSTGRES_USER: tp
       POSTGRES_PASSWORD: ${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}
@@ -20,6 +30,8 @@ services:
   app:
     build: .
     restart: unless-stopped
+    logging: *logging
+    mem_limit: 768m
     depends_on:
       db:
         condition: service_healthy
@@ -30,6 +42,7 @@ services:
       TRUST_PROXY: ${TRUST_PROXY:-false}
       TEACHER_USERNAME: ${TEACHER_USERNAME:-teacher}
       TEACHER_PASSWORD: ${TEACHER_PASSWORD:-teacher123}
+      NODE_OPTIONS: --max-old-space-size=512 # 让 Node 在内存上限以内主动回收
     volumes:
       - uploads:/data/uploads
     ports:
