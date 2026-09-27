@@ -45,7 +45,7 @@ export function LessonView({
   const pct = modules.length ? Math.round((completed.size / modules.length) * 100) : 0;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
+    <div className="grid gap-6 lg:grid-cols-[200px_1fr]">
       <aside className="hidden lg:block">
         <div className="sticky top-20 space-y-3">
           <div className="card p-4">
@@ -149,7 +149,7 @@ function Section({ m, children, onVisible, onSeen }: { m: ViewModule; children: 
     return () => { io.disconnect(); if (timer) clearTimeout(timer); };
   }, []);
   return (
-    <section ref={ref} id={`m-${m.id}`} className="card scroll-mt-20 p-6">
+    <section ref={ref} id={`m-${m.id}`} className={`card scroll-mt-20 ${m.type === "HTML" ? "p-3 sm:p-4" : "p-6"}`}>
       {children}
     </section>
   );

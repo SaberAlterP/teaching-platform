@@ -21,6 +21,8 @@ export function HtmlFrame({
   const frame = useRef<HTMLIFrameElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState(false);
+  // native：浏览器真全屏；page：不支持全屏 API 的设备（如 iPhone）铺满整个页面
+  const [full, setFull] = useState<"native" | "page" | null>(null);
   const cb = useRef(onMessage);
   cb.current = onMessage;
 
@@ -37,8 +39,38 @@ export function HtmlFrame({
     return () => window.removeEventListener("message", handler);
   }, []);
 
+  useEffect(() => {
+    const sync = () => setFull((f) => (document.fullscreenElement === wrap.current ? "native" : f === "native" ? null : f));
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
+
+  useEffect(() => {
+    if (full !== "page") return;
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setFull(null);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", esc);
+    return () => { document.body.style.overflow = overflow; window.removeEventListener("keydown", esc); };
+  }, [full]);
+
+  function toggleFull() {
+    if (full === "native") { document.exitFullscreen?.().catch(() => {}); return; }
+    if (full === "page") { setFull(null); return; }
+    const el = wrap.current;
+    if (el?.requestFullscreen) el.requestFullscreen().catch(() => setFull("page"));
+    else setFull("page");
+  }
+
   return (
-    <div ref={wrap} className="relative overflow-hidden rounded-lg border border-slate-200 bg-white">
+    <div
+      ref={wrap}
+      className={
+        full
+          ? `${full === "page" ? "fixed inset-0 z-50" : "h-full w-full"} relative overflow-hidden bg-white`
+          : "relative overflow-hidden rounded-lg border border-slate-200 bg-white"
+      }
+    >
       {!loaded && (
         <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400">加载中…</div>
       )}
@@ -46,7 +78,8 @@ export function HtmlFrame({
         ref={frame}
         src={src}
         onLoad={() => setLoaded(true)}
-        style={{ height }}
+        // 全屏时铺满屏幕；平时用老师设置的高度，但不超过窗口高度
+        style={full ? { height: "100%" } : { height, maxHeight: "calc(100vh - 96px)" }}
         className="block w-full"
         // 不给 allow-same-origin：包内代码拿不到平台 Cookie，也不能调用平台接口
         sandbox="allow-scripts allow-pointer-lock allow-popups allow-forms allow-modals allow-downloads"
@@ -55,10 +88,10 @@ export function HtmlFrame({
       />
       <button
         type="button"
-        onClick={() => wrap.current?.requestFullscreen?.()}
-        className="absolute right-2 bottom-2 rounded-md bg-black/50 px-2 py-1 text-xs text-white opacity-60 hover:opacity-100"
+        onClick={toggleFull}
+        className="absolute right-2 bottom-2 rounded-md bg-black/60 px-2.5 py-1.5 text-sm text-white opacity-70 hover:opacity-100"
       >
-        ⛶ 全屏
+        {full ? "✕ 退出全屏" : "⛶ 全屏"}
       </button>
     </div>
   );
