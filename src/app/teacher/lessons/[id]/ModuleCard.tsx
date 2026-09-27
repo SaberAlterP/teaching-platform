@@ -46,7 +46,7 @@ export function ModuleCard(p: {
   }
 
   return (
-    <div className={`card overflow-hidden ${p.open ? "ring-2 ring-brand-100" : ""}`}>
+    <div className={`card overflow-clip ${p.open ? "ring-2 ring-brand-100" : ""}`}>
       <div className="flex items-center gap-3 px-4 py-3">
         <span className="cursor-grab select-none text-slate-300" title="拖动排序">⋮⋮</span>
         <span className="text-lg">{p.icon}</span>
