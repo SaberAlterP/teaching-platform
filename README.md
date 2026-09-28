@@ -42,3 +42,7 @@ parent.postMessage({ type: "tp:complete" }, "*");                    // 标记�
 ```
 
 示例见 `demo-content/src/`。
+
+## AI 接口
+
+教师在“AI 接口”页面生成密钥，交给 AI 助手后，它可以通过 `/api/ai` 读写本课程内容（请求头 `Authorization: Bearer tpk_...`）。能新建和修改课时、增删改模块、上传文件和 HTML 包；不能删除课时，也访问不到学生和成绩。`GET /api/ai` 返回全部接口说明。密钥只存哈希，可随时撤销。
