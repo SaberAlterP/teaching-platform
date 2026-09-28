@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { generateApiKey, revokeApiKey } from "../actions";
 
 type Key = { id: string; name: string; prefix: string; createdAt: string; lastUsedAt: string | null };
@@ -9,8 +9,29 @@ const fmt = (s: string | null) => (s ? new Date(s).toLocaleString("zh-CN", { hou
 export function ApiKeysClient({ keys }: { keys: Key[] }) {
   const [name, setName] = useState("Claude");
   const [created, setCreated] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"" | "ok" | "fail">("");
   const [pending, start] = useTransition();
+  const boxRef = useRef<HTMLTextAreaElement>(null);
+
+  // 网站目前是 http，浏览器不允许用 navigator.clipboard，所以退回到选中文本框 + execCommand
+  async function copy() {
+    const box = boxRef.current;
+    box?.focus();
+    box?.select();
+    let ok = false;
+    try {
+      if (window.isSecureContext && navigator.clipboard) {
+        await navigator.clipboard.writeText(message);
+        ok = true;
+      }
+    } catch {}
+    if (!ok) {
+      try {
+        ok = document.execCommand("copy");
+      } catch {}
+    }
+    setCopied(ok ? "ok" : "fail");
+  }
 
   // 给 AI 的完整说明：地址 + 密钥，复制后直接发给它
   const message = created
@@ -26,7 +47,7 @@ export function ApiKeysClient({ keys }: { keys: Key[] }) {
           <button
             className="btn-primary"
             disabled={pending}
-            onClick={() => start(async () => { setCopied(false); setCreated(await generateApiKey(name)); })}
+            onClick={() => start(async () => { setCopied(""); setCreated(await generateApiKey(name)); })}
           >
             {pending ? "生成中…" : "生成密钥"}
           </button>
@@ -34,13 +55,22 @@ export function ApiKeysClient({ keys }: { keys: Key[] }) {
         {created && (
           <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-4">
             <p className="text-sm font-medium text-amber-800">密钥只显示这一次，请复制下面整段发给 AI：</p>
-            <pre className="overflow-x-auto rounded bg-white p-3 text-sm break-all whitespace-pre-wrap">{message}</pre>
-            <button
-              className="btn-outline"
-              onClick={() => navigator.clipboard?.writeText(message).then(() => setCopied(true))}
-            >
-              {copied ? "已复制" : "复制"}
-            </button>
+            <textarea
+              ref={boxRef}
+              readOnly
+              value={message}
+              rows={3}
+              onFocus={(e) => e.currentTarget.select()}
+              className="w-full resize-none rounded bg-white p-3 font-mono text-sm break-all"
+            />
+            <div className="flex items-center gap-3">
+              <button className="btn-outline" onClick={copy}>
+                {copied === "ok" ? "已复制" : "复制"}
+              </button>
+              {copied === "fail" && (
+                <span className="text-sm text-amber-800">浏览器不允许自动复制，文字已选中，请按 Ctrl+C（手机长按）复制。</span>
+              )}
+            </div>
           </div>
         )}
       </div>
