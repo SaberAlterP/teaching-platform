@@ -76,7 +76,7 @@ export async function createLesson(fd: FormData) {
   redirect(`/teacher/lessons/${l.id}`);
 }
 
-export async function updateLesson(lessonId: string, patch: { title?: string; summary?: string }) {
+export async function updateLesson(lessonId: string, patch: { title?: string; summary?: string; section?: string }) {
   const t = await requireTeacher();
   await assertLessonOwner(lessonId, t.id);
   await db.update(schema.lessons).set(patch).where(eq(schema.lessons.id, lessonId));
@@ -121,7 +121,7 @@ export async function duplicateLesson(lessonId: string) {
   const mods = await db.query.modules.findMany({ where: eq(schema.modules.lessonId, lessonId) });
   const [copy] = await db
     .insert(schema.lessons)
-    .values({ courseId: l.courseId, title: `${l.title}（副本）`, summary: l.summary, order: l.order + 1 })
+    .values({ courseId: l.courseId, title: `${l.title}（副本）`, summary: l.summary, section: l.section, order: l.order + 1 })
     .returning();
   if (mods.length)
     await db.insert(schema.modules).values(
@@ -155,7 +155,7 @@ export async function importLesson(json: string): Promise<{ id?: string; error?:
 async function doImportLesson(json: string) {
   const t = await requireTeacher();
   const { course } = await getTeacherCourse(t.id);
-  let parsed: { title?: string; summary?: string; modules?: { type: ModuleType; title?: string; data: object }[] };
+  let parsed: { title?: string; summary?: string; section?: string; modules?: { type: ModuleType; title?: string; data: object }[] };
   try {
     parsed = JSON.parse(json);
   } catch {
@@ -169,7 +169,7 @@ async function doImportLesson(json: string) {
     .where(eq(schema.lessons.courseId, course.id));
   const [l] = await db
     .insert(schema.lessons)
-    .values({ courseId: course.id, title: parsed.title || "导入的课时", summary: parsed.summary ?? "", order: (m ?? -1) + 1 })
+    .values({ courseId: course.id, title: parsed.title || "导入的课时", summary: parsed.summary ?? "", section: typeof parsed.section === "string" ? parsed.section : "", order: (m ?? -1) + 1 })
     .returning();
   const mods = parsed.modules.filter((x) => valid.includes(x.type));
   if (mods.length)
