@@ -1,5 +1,5 @@
 // 数据模型：老师 → 课程 → 班级 → 学生
-// 第一期界面只用到单老师、单课程、单班级，但表结构已支持扩展。
+// 每位老师可有多门课程，每门课目前用一个班级；表结构也支持多老师、多班级。
 import {
   pgTable, pgEnum, text, timestamp, boolean, integer, real, jsonb, primaryKey, uniqueIndex, index,
 } from "drizzle-orm/pg-core";

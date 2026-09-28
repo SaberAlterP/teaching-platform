@@ -1,11 +1,12 @@
 "use server";
 import { randomInt } from "crypto";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { and, eq, inArray, max } from "drizzle-orm";
+import { and, count, eq, inArray, max } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { hashPassword, requireTeacher } from "@/lib/auth";
-import { assertLessonOwner, assertModuleOwner, getTeacherCourse } from "@/lib/course";
+import { COURSE_COOKIE, assertLessonOwner, assertModuleOwner, createCourse, getTeacherCourse, listTeacherCourses } from "@/lib/course";
 import { defaultData, type ModuleType, type QuizData } from "@/lib/modules";
 import { createApiKey } from "@/lib/api-key";
 import { cleanupFiles, regradeSubmissions, validateQuiz, writeOrder } from "@/lib/content";
@@ -18,7 +19,46 @@ export async function updateCourse(fd: FormData) {
     .update(schema.courses)
     .set({ title: String(fd.get("title") || "我的课程"), description: String(fd.get("description") ?? "") })
     .where(eq(schema.courses.id, course.id));
-  revalidatePath("/teacher");
+  revalidatePath("/teacher", "layout");
+}
+
+async function selectCourse(courseId: string) {
+  (await cookies()).set(COURSE_COOKIE, courseId, {
+    httpOnly: true, sameSite: "lax", secure: process.env.COOKIE_SECURE === "true", path: "/", maxAge: 60 * 60 * 24 * 365,
+  });
+}
+
+// 切换当前课程（课时、学生、批改、统计都跟着切换）
+export async function switchCourse(courseId: string) {
+  const t = await requireTeacher();
+  const { course } = await getTeacherCourse(t.id, courseId);
+  await selectCourse(course.id);
+  revalidatePath("/teacher", "layout");
+}
+
+export async function newCourse(title: string) {
+  const t = await requireTeacher();
+  const course = await createCourse(t.id, title.trim().slice(0, 100) || "新课程");
+  await selectCourse(course.id);
+  redirect("/teacher");
+}
+
+// 只允许删除空课程（没有课时、没有学生），防止误删内容和成绩
+export async function deleteCourse(courseId: string) {
+  const t = await requireTeacher();
+  const { course } = await getTeacherCourse(t.id, courseId);
+  if ((await listTeacherCourses(t.id)).length <= 1) return { error: "至少要保留一门课程" };
+  const [{ n: lessons }] = await db.select({ n: count() }).from(schema.lessons).where(eq(schema.lessons.courseId, course.id));
+  const [{ n: students }] = await db
+    .select({ n: count() })
+    .from(schema.enrollments)
+    .innerJoin(schema.classes, eq(schema.classes.id, schema.enrollments.classId))
+    .where(eq(schema.classes.courseId, course.id));
+  if (lessons || students) return { error: `这门课还有 ${lessons} 个课时、${students} 名学生，请先删除或移走后再删课程` };
+  await db.delete(schema.courses).where(eq(schema.courses.id, course.id));
+  (await cookies()).delete(COURSE_COOKIE);
+  revalidatePath("/teacher", "layout");
+  return { error: "" };
 }
 
 // ---------------- 课时 ----------------
@@ -88,6 +128,19 @@ export async function duplicateLesson(lessonId: string) {
       mods.map((m) => ({ lessonId: copy.id, order: m.order, type: m.type, title: m.title, data: m.data })),
     );
   revalidatePath("/teacher");
+}
+
+// 把课时（连同模块和学生作答）移到自己的另一门课程，排在末尾
+export async function moveLesson(lessonId: string, courseId: string) {
+  const t = await requireTeacher();
+  await assertLessonOwner(lessonId, t.id);
+  const { course } = await getTeacherCourse(t.id, courseId);
+  const [{ m }] = await db
+    .select({ m: max(schema.lessons.order) })
+    .from(schema.lessons)
+    .where(eq(schema.lessons.courseId, course.id));
+  await db.update(schema.lessons).set({ courseId: course.id, order: (m ?? -1) + 1 }).where(eq(schema.lessons.id, lessonId));
+  revalidatePath("/teacher", "layout");
 }
 
 // 从导出的 JSON 导入一个课时
@@ -229,7 +282,7 @@ export async function importStudents(rows: StudentRow[]) {
       if (exists.role === "TEACHER") { skipped.push({ username, reason: "与教师账号冲突" }); continue; }
       // 已有账号：确保在班里即可
       await db.insert(schema.enrollments).values({ userId: exists.id, classId: cls.id }).onConflictDoNothing();
-      skipped.push({ username, reason: "账号已存在（已加入班级）" });
+      skipped.push({ username, reason: "账号已存在（已加入本课程）" });
       continue;
     }
     const password = String(r.password ?? "").trim() || randomPassword();
@@ -262,10 +315,13 @@ export async function updateStudent(userId: string, name: string) {
   revalidatePath("/teacher/students");
 }
 
+// 从本课程移除学生；如果他不再上任何课程，连账号和作答记录一起删除
 export async function deleteStudent(userId: string) {
   const t = await requireTeacher();
-  await assertStudentInMyClass(userId, t.id);
-  await db.delete(schema.users).where(and(eq(schema.users.id, userId), eq(schema.users.role, "STUDENT")));
+  const cls = await assertStudentInMyClass(userId, t.id);
+  await db.delete(schema.enrollments).where(and(eq(schema.enrollments.userId, userId), eq(schema.enrollments.classId, cls.id)));
+  const other = await db.query.enrollments.findFirst({ where: eq(schema.enrollments.userId, userId) });
+  if (!other) await db.delete(schema.users).where(and(eq(schema.users.id, userId), eq(schema.users.role, "STUDENT")));
   revalidatePath("/teacher/students");
 }
 
@@ -275,6 +331,7 @@ async function assertStudentInMyClass(userId: string, teacherId: string) {
     where: and(eq(schema.enrollments.userId, userId), eq(schema.enrollments.classId, cls.id)),
   });
   if (!e) throw new Error("该学生不在你的班级");
+  return cls;
 }
 
 // ---------------- 批改 ----------------

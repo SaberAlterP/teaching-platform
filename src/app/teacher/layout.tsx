@@ -3,10 +3,11 @@ import { db, schema } from "@/db";
 import { requireTeacher } from "@/lib/auth";
 import { getTeacherCourse } from "@/lib/course";
 import { TopNav } from "@/components/TopNav";
+import { CourseSwitcher } from "./CourseSwitcher";
 
 export default async function TeacherLayout({ children }: { children: React.ReactNode }) {
   const t = await requireTeacher();
-  const { course } = await getTeacherCourse(t.id);
+  const { course, courses } = await getTeacherCourse(t.id);
   const [{ pending }] = await db
     .select({ pending: count() })
     .from(schema.submissions)
@@ -18,6 +19,7 @@ export default async function TeacherLayout({ children }: { children: React.Reac
       <TopNav
         name={t.name}
         role="TEACHER"
+        switcher={<CourseSwitcher current={course.id} courses={courses.map((c) => ({ id: c.id, title: c.title }))} />}
         links={[
           { href: "/teacher", label: "课程内容" },
           { href: "/teacher/students", label: "学生" },

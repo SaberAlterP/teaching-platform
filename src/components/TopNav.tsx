@@ -6,10 +6,12 @@ export function TopNav({
   name,
   role,
   links,
+  switcher,
 }: {
   name: string;
   role: "TEACHER" | "STUDENT";
   links: { href: string; label: string; badge?: number }[];
+  switcher?: React.ReactNode;
 }) {
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -18,6 +20,7 @@ export function TopNav({
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-500 text-sm text-white">实</span>
           <span className="hidden sm:inline">教学实训平台</span>
         </Link>
+        {switcher}
         <NavLinks links={links} />
         <div className="ml-auto flex shrink-0 items-center gap-1 text-sm">
           <span className="mr-2 hidden text-slate-500 sm:inline">
