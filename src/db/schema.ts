@@ -59,6 +59,8 @@ export const lessons = pgTable(
     courseId: text("course_id").notNull().references(() => courses.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     summary: text("summary").notNull().default(""),
+    // 所属模块/章节名，课时列表按它分组；空表示不分组
+    section: text("section").notNull().default(""),
     order: integer("order").notNull().default(0),
     status: lessonStatusEnum("status").notNull().default("DRAFT"),
     openAt: timestamp("open_at", { withTimezone: true }),

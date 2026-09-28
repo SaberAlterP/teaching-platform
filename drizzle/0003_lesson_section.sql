@@ -1,0 +1,1 @@
+ALTER TABLE "lessons" ADD COLUMN "section" text DEFAULT '' NOT NULL;

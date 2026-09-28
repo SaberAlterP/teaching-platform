@@ -13,6 +13,7 @@ export default async function TeacherHome() {
       id: schema.lessons.id,
       title: schema.lessons.title,
       summary: schema.lessons.summary,
+      section: schema.lessons.section,
       status: schema.lessons.status,
       openAt: schema.lessons.openAt,
       updatedAt: schema.lessons.updatedAt,

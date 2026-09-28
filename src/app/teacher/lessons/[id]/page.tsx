@@ -21,15 +21,23 @@ export default async function LessonEditPage({ params }: { params: Promise<{ id:
     ? await db.select().from(schema.assets).where(inArray(schema.assets.id, assetIds))
     : [];
 
+  // 本课程已有的模块名，供“所属模块”输入框提示
+  const sections = await db
+    .selectDistinct({ s: schema.lessons.section })
+    .from(schema.lessons)
+    .where(eq(schema.lessons.courseId, lesson.courseId));
+
   return (
     <LessonEditor
       lesson={{
         id: lesson.id,
         title: lesson.title,
         summary: lesson.summary,
+        section: lesson.section,
         status: lesson.status,
         openAt: lesson.openAt?.toISOString() ?? null,
       }}
+      sections={sections.map((x) => x.s).filter(Boolean).sort((a, b) => a.localeCompare(b, "zh-CN"))}
       modules={mods.map((m) => ({ id: m.id, type: m.type, title: m.title, data: m.data }))}
       packages={Object.fromEntries(assets.map((a) => [a.id, { filename: a.filename, url: `/pkg/${a.id}/${a.entry}` }]))}
     />
