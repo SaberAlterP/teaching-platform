@@ -40,6 +40,7 @@ export function HtmlEditor({
           {progress !== null ? `上传中 ${Math.round(progress * 100)}%` : pkg ? "替换 HTML 包" : "上传 HTML 包"}
         </button>
         {pkg && <span className="text-sm text-slate-600">当前：{pkg.filename}</span>}
+        {pkg && <a href={`/api/packages/${data.assetId}/download`} className="btn-outline" download>下载</a>}
         <span className="text-xs text-slate-400">单个 .html 文件，或包含 index.html 的 .zip（可带 js、图片、模型等资源）</span>
       </div>
 
