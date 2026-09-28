@@ -16,6 +16,6 @@ async function bundle(name, outName) {
 }
 
 await bundle("transport-3d", "五种运输方式-3D.html");
-await bundle("port-chain", "码头作业链-3D.html");
+await bundle("port-chain", "码头换装链-3D.html");
 fs.copyFileSync(src("dispatch-game.html"), out("物流调度小游戏.html"));
 console.log("已生成：", fs.readdirSync(path.join(dir, "dist")).join("，"));

@@ -1,5 +1,5 @@
-// 集装箱码头作业链 3D：进口 / 出口两条流程动画（岸桥—内集卡—场桥—堆场—外集卡—闸口）+ 练习（排序、集卡配置）
-// 构建：npm run demo:build  → demo-content/dist/码头作业链-3D.html（单文件，可直接上传到平台）
+// 集装箱码头换装链 3D：海铁换装 / 进口 / 出口三条流程动画（岸桥—集卡—场桥—堆场—闸口—门吊—铁路平车）+ 练习（排序、小题、集卡配置）
+// 构建：npm run demo:build  → demo-content/dist/码头换装链-3D.html（单文件，可直接上传到平台）
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
@@ -375,7 +375,9 @@ const INFO = {
   yard: ["堆场", "集装箱在港区内临时存放的场地，一般分为进口箱区、出口箱区、空箱区、冷藏箱区等。每个箱位用“箱区—贝—排—层”表示。"],
   cfs: ["集装箱货运站（CFS）", "拼箱货在这里拆箱、装箱和分拨：多个货主的小批量货物拼成一个整箱出口，或把进口拼箱拆开分给各个收货人。"],
   office: ["码头操作中心", "码头操作系统（TOS）在这里运行：制定船舶配载和堆场计划，给岸桥、场桥、集卡派发作业指令，监控整个作业链。"],
-  impBox: ["进口箱 " + IMP_NUM, "40 尺普通干货箱（箱型代码 45G1）。箱号由 4 个字母（箱主代码 + U）、6 位序号和 1 位校验码组成，校验码可以防止抄错箱号。"],
+  rmg: ["铁路门吊（轨道式龙门起重机）", "跨在铁路装卸线和集卡车道上方，沿地面轨道行走，把集装箱从集卡吊到铁路平车上（或反过来）。没有门吊的场站，常用机动灵活的正面吊装卸火车。"],
+  train: ["集装箱班列（铁路平车）", "专门装运集装箱的铁路平车，车面有锁头（旋锁座）固定箱子四个角。一列班列可以装几十个箱子，按固定时刻发车，是海铁联运的“干线”。"],
+  impBox: ["海铁联运箱 / 进口箱 " + IMP_NUM, "40 尺普通干货箱（箱型代码 45G1）。箱号由 4 个字母（箱主代码 + U）、6 位序号和 1 位校验码组成，校验码可以防止抄错箱号。"],
   expBox: ["出口箱 " + EXP_NUM, "40 尺普通干货箱（箱型代码 45G1），装好货、施加铅封后由外集卡运进港区，等待装船出口。"],
 };
 const pickables = [];
@@ -415,7 +417,7 @@ function dashed(x1, z1, x2, z2, dash = 3, gap = 3, w = 0.18, col = "white") {
     g.fillStyle = `rgba(${v},${v + 4},${v + 8},.35)`;
     g.fillRect(rnd() * 256, rnd() * 256, 1.5, 1.5);
   }
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 520), new THREE.MeshStandardMaterial({ map: toTex(c, [90, 52]), roughness: 0.95 }));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(1500, 520), new THREE.MeshStandardMaterial({ map: toTex(c, [150, 52]), roughness: 0.95 }));
   ground.rotation.x = -Math.PI / 2;
   ground.position.set(0, 0, QUAY + 260);
   ground.receiveShadow = true;
@@ -526,6 +528,8 @@ const P = {
   etOut: new Path([[94, 146], [94, 280]]),
   itArrive: new Path([[72, 16], [72, LANE_A], [0, LANE_A]]),
   itToQuay: new Path([[0, LANE_A], [-72, LANE_A], [-72, 10], [0, 10]]),
+  toRail: new Path([[0, LANE_A], [-96, LANE_A], [-104, 69], [-150, 69]], 6),
+  railLeave: new Path([[-150, 69], [-240, 69]]),
   ambLoop: new Path([[0, 91], [64, 91], [64, 116], [-64, 116], [-64, 91], [0, 91]], 8),
 };
 // 路面车道边线
@@ -538,7 +542,7 @@ function laneEdges(path, off = 2.2, step = 6) {
     for (const s of [-1, 1]) stripe(a.x + n.x * off * s, a.z + n.z * off * s, b.x + n.x * off * s, b.z + n.z * off * s, 0.16);
   }
 }
-for (const k of ["itToYard", "itLeave", "etToYard", "etToOut", "itToQuay", "ambLoop"]) laneEdges(P[k]);
+for (const k of ["itToYard", "itLeave", "etToYard", "etToOut", "itToQuay", "ambLoop", "toRail", "railLeave"]) laneEdges(P[k]);
 
 // ---------- 集装箱船 ----------
 const ship = { g: new THREE.Group(), x: 0 };
@@ -830,14 +834,14 @@ class STS extends Hoist {
 
 // ---------- 场桥（RTG） ----------
 class RTG extends Hoist {
-  constructor(x, zc, no) {
+  constructor(x, zc, no, info = "rtg", color = 0xf2b705) {
     super();
     this.g = new THREE.Group();
     this.g.position.set(x, 0, zc);
     this.x = x;
     world.add(this.g);
     const k = new Kit();
-    const Y = 0xf2b705, D = 0x2b3440, Wt = 0xeef2f6;
+    const Y = color, D = 0x2b3440, Wt = 0xeef2f6;
     const SZ = 11.6, LX = 3.6, TOP = 20;
     for (const z of [-SZ, SZ]) {
       k.add(BOX(9.6, 1.2, 1.4), Y, 0, 1.9, z);
@@ -897,7 +901,7 @@ class RTG extends Hoist {
     this.g.add(this.trolley);
     this.initHoist(TOP + 2.5, 0.9, 0.7);
     this.set(0, 17);
-    pickable(this.g, "rtg");
+    pickable(this.g, info);
   }
   setX(x) {
     const d = x - this.x;
@@ -1061,7 +1065,7 @@ const yardH = {};
   // 空箱堆场
   for (let i = 0; i < 4; i++) for (let j = 0; j < 5; j++) {
     const h = 3 + Math.floor(rnd() * 3);
-    for (let t = 0; t < h; t++) list.push({ x: -100 + i * 3.2, y: yardY(t), z: 50 + j * 13.5, color: pickColor(), brand: pickBrand(), rot: true });
+    for (let t = 0; t < h; t++) list.push({ x: 106 + i * 3.2, y: yardY(t), z: 50 + j * 13.5, color: pickColor(), brand: pickBrand(), rot: true });
   }
   const yard = new THREE.Group();
   world.add(yard);
@@ -1312,6 +1316,93 @@ const craneL = new STS(-39, "QC 02");
 const craneR = new STS(39, "QC 04");
 const rtgA = new RTG(13, YA, "RTG A-1");
 const rtgB = new RTG(-26, YB, "RTG B-2");
+
+// ---------- 铁路装卸线（海铁联运换装） ----------
+const RAIL_Z = 80, RAIL2_Z = 86, RMG_Z = 78, RAIL_LANE = 69;
+const WAGON_TOP = 1.55; // 平车承箱面高度
+const WAGON_X = -150; // 目标平车中心
+{
+  const k = new Kit();
+  for (const z of [RAIL_Z, RAIL2_Z]) {
+    k.add(BOX(700, 0.25, 3.6), 0x9b9186, -370, 0.12, z, { edge: false });
+    for (let x = -720; x < -20; x += 0.9) k.add(BOX(0.25, 0.14, 2.6), 0x5b4a3a, x, 0.3, z, { edge: false });
+    for (const s2 of [-0.72, 0.72]) k.add(BOX(700, 0.16, 0.12), 0x6b7280, -370, 0.45, z + s2, { cls: "metal" });
+    k.add(BOX(0.6, 1.2, 3.2), 0xc0392b, -22, 0.6, z); // 车挡
+  }
+  k.build(world);
+  for (const dz of [-11.6, 11.6]) stripe(-260, RMG_Z + dz, -110, RMG_Z + dz, 0.4, "yellow");
+  const s = signMesh(14, 4, (g, w, h) => textFill(g, "铁路装卸线", w / 2, h / 2, h * 0.6, "rgba(255,255,255,.85)"), { transparent: true, ppm: 30 });
+  s.rotation.x = -Math.PI / 2;
+  s.position.set(-120, 0.05, 63.5);
+  world.add(s);
+}
+function buildWagon(parent, x) {
+  const k = new Kit();
+  const B = 0x3a3f47, R = 0x7c2d24;
+  k.add(BOX(13.9, 0.32, 2.8), R, x, 1.36, 0);
+  for (const sz of [-1, 1]) k.add(BOX(13.9, 0.5, 0.16), B, x, 1.05, sz * 1.25);
+  k.add(BOX(13.4, 0.55, 0.5), B, x, 0.98, 0);
+  for (const sx of [-1, 1]) {
+    k.add(BOX(0.4, 0.3, 0.3), 0x1f2328, x + sx * 7.15, 1.05, 0);
+    for (const sz of [-1, 1]) k.add(BOX(0.22, 0.14, 0.22), 0xf2c200, x + sx * 6.05, 1.58, sz * 1.1);
+    // 转向架
+    const bx = x + sx * 5.2;
+    k.add(BOX(3.2, 0.5, 2.2), 0x2a2e34, bx, 0.8, 0);
+    for (const dx of [-0.9, 0.9]) for (const sz of [-1, 1]) k.add(CYL(0.42, 0.42, 0.14, 14), 0x2f3338, bx + dx, 0.84, sz * 0.72, { rx: Math.PI / 2, cls: "metal", thr: 40 });
+  }
+  k.build(parent);
+}
+const train = { g: new THREE.Group(), x: 0 };
+world.add(train.g);
+train.g.position.z = RAIL_Z;
+train.setX = (x) => {
+  train.x = x;
+  train.g.position.x = x;
+};
+{
+  const cars = [-2, -1, 0, 1, 2].map((i) => WAGON_X + i * 14.6);
+  cars.forEach((x) => buildWagon(train.g, x));
+  const list = [];
+  cars.forEach((x) => {
+    if (x !== WAGON_X) list.push({ x, y: WAGON_TOP + CH / 2, z: 0, color: pickColor(), brand: pickBrand() });
+  });
+  buildStacks(train.g, list);
+  // 内燃机车（在西端，发车向西）
+  const lx = cars[0] - 7.3 - 10;
+  const k = new Kit();
+  const G = 0x1f6f4a, Yl = 0xf2c200, D = 0x2a2e34;
+  k.add(BOX(19, 0.5, 3.0), D, lx, 1.2, 0);
+  k.add(BOX(18.4, 2.6, 2.9), G, lx, 2.75, 0);
+  k.add(BOX(18.5, 0.3, 2.95), Yl, lx, 2.2, 0, { edge: false });
+  k.add(BOX(3.2, 0.5, 2.6), 0x2f3a45, lx, 4.3, 0);
+  for (const sx of [-1, 1]) {
+    k.add(BOX(0.06, 0.9, 2.2), 0x1c2e45, lx + sx * 9.22, 3.35, 0, { cls: "glass" });
+    for (const sz of [-1, 1]) k.add(BOX(1.2, 0.7, 0.05), 0x1c2e45, lx + sx * 8.1, 3.35, sz * 1.46, { cls: "glass" });
+    k.add(BOX(0.1, 0.2, 0.3), 0xfff7d6, lx + sx * 9.27, 1.85, 0, { cls: "glow" });
+    const bx = lx + sx * 6.2;
+    k.add(BOX(4.6, 0.6, 2.4), D, bx, 0.8, 0);
+    for (const dx of [-1.6, 0, 1.6]) for (const sz of [-1, 1]) k.add(CYL(0.5, 0.5, 0.14, 14), 0x2f3338, bx + dx, 0.9, sz * 0.72, { rx: Math.PI / 2, cls: "metal", thr: 40 });
+  }
+  for (let i = -3; i <= 3; i++) k.add(BOX(1.2, 1.0, 0.04), 0x2b5d44, lx + i * 2, 3.0, 1.47, { edge: false });
+  k.build(train.g);
+  const sign = signMesh(6, 0.8, (g, w, h) => textFill(g, "X8201 次", w / 2, h / 2, h * 0.7, "#fff"), { transparent: true });
+  sign.position.set(lx, 3.8, 1.48);
+  train.g.add(sign);
+  pickable(train.g, "train");
+  // 另一股道停着的车辆
+  const other = new THREE.Group();
+  other.position.z = RAIL2_Z;
+  const ol = [];
+  for (let i = 0; i < 7; i++) {
+    const x = -250 + i * 14.6;
+    buildWagon(other, x);
+    if (i % 3 !== 1) ol.push({ x, y: WAGON_TOP + CH / 2, z: 0, color: pickColor(), brand: pickBrand() });
+  }
+  buildStacks(other, ol);
+  world.add(other);
+  pickable(other, "train");
+}
+const rmg = new RTG(-135, RMG_Z, "RMG 门吊", "rmg", 0x2f7fd1);
 const itruck = new Truck("yard", 0xf5a524, "itruck");
 const etruck = new Truck("road", 0xc8372d, "etruck");
 const impBox = makeBox(0xe8870e, "HAIYUN", IMP_NUM);
@@ -1373,6 +1464,7 @@ const LOC = {
   expShip: () => holdBy(expBox, ship.g, 0, shipY(3), shipRowZ(8)),
   impYard: () => holdBy(impBox, world, 0, yardY(2), YA + 2.5),
   expYard: () => holdBy(expBox, world, 0, yardY(1), YA - 2.5),
+  impWagon: () => holdBy(impBox, train.g, WAGON_X, WAGON_TOP + CH / 2, 0),
 };
 function hide(box) {
   world.add(box);
@@ -1464,6 +1556,10 @@ function base() {
   rtgA.setX(13);
   rtgA.set(0, 17);
   rtgA.lamp(false);
+  rmg.setX(-135);
+  rmg.set(0, 17);
+  rmg.lamp(false);
+  train.setX(0);
   itruck.g.visible = etruck.g.visible = true;
   gateReset();
   ghost.visible = false;
@@ -1822,7 +1918,155 @@ const EXP = [
     },
   },
 ];
-const FLOWS = { imp: IMP, exp: EXP };
+// 海铁联运换装：船 → 岸桥 → 堆场 → 集卡短驳 → 门吊装车 → 加固 → 班列发运
+const RAIL = [
+  {
+    short: "岸桥卸船", title: "岸桥卸船",
+    text: "集装箱船靠泊后，岸桥把这个要转铁路的箱子从船上卸下，放到岸桥下等候的内集卡上。它的下一程是铁路班列，这种“海运 + 铁路”的组合叫海铁联运。",
+    points: ["到港前，船公司和场站已经收到到达预报：箱号、箱型、重量、铅封号、下一程班列", "赶班列的箱子优先卸船"],
+    where: "海铁联运箱 " + IMP_NUM + "：<b>船上 → 内集卡</b>",
+    equip: ["sts", "itruck"],
+    cam: { pos: [-34, 64, 48], tgt: [0, 8, -4] },
+    pre() { IMP[1].pre(); },
+    run: (S) => IMP[1].run(S),
+  },
+  {
+    short: "内集卡运到堆场", title: "内集卡水平运输到堆场",
+    text: "内集卡把箱子从码头前沿拉到堆场，停在场桥下的车道上。",
+    points: ["如果班列就在旁边等着，也可以不进堆场，直接用集卡送到铁路装卸线装车，这叫“直取”", "直取省掉一次落地和吊装，但对时间衔接要求很高"],
+    where: "海铁联运箱：<b>内集卡上</b>，前往 A 区 18 贝",
+    equip: ["itruck", "yard"],
+    cam: { follow: truckPos(itruck), off: [26, 24, -26] },
+    pre() { IMP[2].pre(); },
+    run: (S) => IMP[2].run(S),
+  },
+  {
+    short: "场桥卸车堆存", title: "场桥卸车、落地堆存",
+    text: "场桥把箱子吊下，放到堆场里等待装火车的箱位上（A 区 18 贝 4 排 3 层）。同一趟班列的箱子集中堆放，装车时按顺序取。",
+    points: ["先装车的箱子放在上层，减少翻箱", "堆存期间核对箱号、铅封和箱体外观，异常当场记录"],
+    where: "海铁联运箱：<b>内集卡 → 堆场 A-18-04-3</b>",
+    equip: ["rtg", "yard"],
+    cam: { pos: [42, 34, 32], tgt: [2, 6, 66] },
+    pre() { IMP[3].pre(); },
+    run: (S) => IMP[3].run(S),
+  },
+  {
+    short: "场桥发箱装集卡", title: "按装车计划发箱",
+    text: "班列到场前，场站按铁路装车计划排好顺序。集卡开到场桥下，场桥把这个箱子装上集卡，准备短驳到铁路装卸线。",
+    points: ["装车计划写明：哪趟班列、哪股道、第几辆平车", "场站设备要提前指派：场桥负责堆场取箱，门吊或正面吊负责装火车"],
+    where: "海铁联运箱：<b>堆场 → 内集卡</b>，计划装 X8201 次第 3 辆平车",
+    equip: ["rtg", "itruck"],
+    cam: { pos: [42, 34, 32], tgt: [2, 6, 66] },
+    pre() {
+      base();
+      rtgA.setX(0);
+      rtgA.set(2.5, 17);
+      LOC.impYard();
+      hide(expBox);
+      itruck.place(P.itArrive, 0);
+      etruck.g.visible = false;
+      clearBadges(boxPos(impBox));
+    },
+    async run(S) {
+      badge("装车计划：X8201 次 · 1 道 · 第 3 辆平车", "info");
+      await drive(S, itruck, P.itArrive, 12);
+      await transfer(S, rtgA, impBox, 2.5, yardTop(2), LANE_A - YA, TRUCK_TOP, 17, () => onTruck(impBox, itruck));
+      await S.wait(0.5);
+    },
+  },
+  {
+    short: "集卡短驳到铁路线", title: "集卡短驳到铁路装卸线",
+    text: "集卡把箱子从堆场拉到铁路装卸线，停在门吊下面的车道上。这段港内短距离转运叫“短驳”。",
+    points: ["短驳时间要算进全程时刻表：晚了就赶不上班列", "到达装卸线时核对车次、股道和平车号"],
+    where: "海铁联运箱：<b>集卡上</b>，前往铁路装卸线",
+    equip: ["itruck", "rmg"],
+    cam: { follow: truckPos(itruck), off: [18, 26, 30] },
+    pre() {
+      base();
+      rtgA.setX(0);
+      onTruck(impBox, itruck);
+      hide(expBox);
+      itruck.place(P.toRail, 0);
+      etruck.g.visible = false;
+    },
+    async run(S) {
+      await drive(S, itruck, P.toRail, 15);
+      await S.wait(0.5);
+    },
+  },
+  {
+    short: "门吊装上平车", title: "门吊把箱子装上铁路平车",
+    text: "门吊开到这辆平车上方，吊起集卡上的箱子，小车移到铁轨上方，把箱子对准平车的四个锁头放下。",
+    points: ["40 尺箱放在平车中间，四个角落进锁头", "没有门吊的场站用正面吊装车，更灵活但效率低一些"],
+    where: "海铁联运箱：<b>集卡 → 铁路平车</b>",
+    equip: ["rmg", "train"],
+    cam: { pos: [-112, 30, 44], tgt: [-150, 4, 76] },
+    pre() {
+      base();
+      rtgA.setX(0);
+      onTruck(impBox, itruck);
+      hide(expBox);
+      itruck.place(P.toRail, P.toRail.L);
+      etruck.g.visible = false;
+    },
+    async run(S) {
+      await gantryTo(S, rmg, WAGON_X);
+      await transfer(S, rmg, impBox, RAIL_LANE - RMG_Z, TRUCK_TOP, RAIL_Z - RMG_Z, WAGON_TOP + CH, 17, () => LOC.impWagon());
+      await S.wait(0.5);
+    },
+  },
+  {
+    short: "加固检查", title: "加固与装车检查",
+    text: "箱子落位后，检查四个角的锁头是否锁闭到位，核对箱号、铅封，确认箱门朝向和装载位置符合要求，填写装车记录。空集卡返回堆场。",
+    points: ["锁头没锁好，列车运行中箱子可能移位甚至坠落", "加固检查合格后，这辆平车才能编进班列"],
+    where: "海铁联运箱：<b>X8201 次第 3 辆平车</b>",
+    equip: ["train", "rmg"],
+    cam: { pos: [-132, 12, 60], tgt: [-150, 2.5, 79] },
+    pre() {
+      base();
+      rtgA.setX(0);
+      rmg.setX(WAGON_X);
+      LOC.impWagon();
+      hide(expBox);
+      itruck.place(P.toRail, P.toRail.L);
+      etruck.g.visible = false;
+      clearBadges(boxPos(impBox));
+    },
+    async run(S) {
+      const leave = quiet(drive(S, itruck, P.railLeave, 10));
+      for (const t of ["四角锁头锁闭 ✓", "箱号、铅封核对 ✓", "装载位置、偏载检查 ✓", "装车记录已上传 ✓"]) {
+        await S.wait(1.2);
+        badge(t);
+      }
+      await leave;
+      await S.wait(1.5);
+    },
+  },
+  {
+    short: "班列发运", title: "班列发运",
+    text: "整列车装完、检查合格后，班列按时刻表发车，箱子沿铁路运往内陆（例如重庆）。到站后再由集卡送到收货人手里，一票货完成了“船 → 铁路 → 公路”的全程联运。",
+    points: ["反方向同样适用：内陆班列到港 → 卸车 → 堆场 → 岸桥装船", "换装环节环环相扣：任何一环慢了，箱子就赶不上下一程"],
+    where: "海铁联运箱：<b>随 X8201 次班列发运</b>",
+    equip: ["train"],
+    cam: { pos: [-110, 42, 36], tgt: [-210, 2, 80] },
+    pre() {
+      base();
+      rtgA.setX(0);
+      rmg.setX(WAGON_X);
+      LOC.impWagon();
+      hide(expBox);
+      itruck.place(P.railLeave, P.railLeave.L);
+      etruck.g.visible = false;
+      clearBadges();
+    },
+    async run(S) {
+      await S.wait(1);
+      await S.tween(14, (k) => train.setX(lerp(0, -330, k)), easeIn);
+    },
+  },
+];
+const FLOWS = { imp: IMP, exp: EXP, rail: RAIL };
+const FLOW_NAME = { imp: "进口", exp: "出口", rail: "海铁换装" };
 
 // ---------- 镜头 ----------
 let camGoal = null, autoCam = true;
@@ -1844,7 +2088,7 @@ const OVERVIEW = { pos: [-150, 150, -95], tgt: [15, 0, 70] };
 
 // ---------- 流程控制 ----------
 let mode = "imp", stepIdx = 0, playing = true, speed = 1, autoNext = true, runId = 0;
-const seen = { imp: new Set(), exp: new Set() };
+const seen = { imp: new Set(), exp: new Set(), rail: new Set() };
 function steps() { return FLOWS[mode]; }
 function goStep(i) {
   const st = steps();
@@ -1872,14 +2116,19 @@ function goStep(i) {
   );
 }
 function flowDone() {
-  const other = mode === "imp" ? "exp" : "imp";
+  const next = { imp: "exp", exp: "rail", rail: "imp" }[mode];
+  const route = {
+    imp: "箱子经过 船 → 岸桥 → 内集卡 → 场桥 → 堆场 → 外集卡 → 闸口，离开了码头。",
+    exp: "箱子经过 闸口 → 外集卡 → 场桥 → 堆场 → 内集卡 → 岸桥 → 船，出口了。",
+    rail: "箱子经过 船 → 岸桥 → 堆场 → 集卡短驳 → 门吊 → 铁路平车 → 班列，完成了海铁换装。",
+  }[mode];
   showModal(`
-    <h2>${mode === "imp" ? "进口" : "出口"}流程看完了</h2>
-    <p>${mode === "imp" ? "箱子经过 船 → 岸桥 → 内集卡 → 场桥 → 堆场 → 外集卡 → 闸口，离开了码头。" : "箱子经过 闸口 → 外集卡 → 场桥 → 堆场 → 内集卡 → 岸桥 → 船，出口了。"}</p>
-    <p>可以对比看看${other === "exp" ? "出口" : "进口"}流程：同样的设备，顺序正好反过来。看完后去“练习”检验一下。</p>
+    <h2>${FLOW_NAME[mode]}流程看完了</h2>
+    <p>${route}</p>
+    <p>可以接着看${FLOW_NAME[next]}流程，对比同样的设备在不同流程里的顺序。看完后去“练习”检验一下。</p>
     <div class="acts">
       <button class="btn" data-act="replay">再看一遍</button>
-      <button class="btn" data-act="${other}">看${other === "exp" ? "出口" : "进口"}流程</button>
+      <button class="btn" data-act="${next}">看${FLOW_NAME[next]}流程</button>
       <button class="btn primary" data-act="prac">去练习</button>
     </div>`);
 }
@@ -1887,7 +2136,7 @@ function renderFlow() {
   const st = steps();
   $("steps").innerHTML = st.map((s, i) => `<li data-i="${i}" class="${i === stepIdx ? "on" : ""} ${seen[mode].has(i) ? "done" : ""}"><i>${i + 1}</i>${s.short}</li>`).join("");
   const s = st[stepIdx];
-  $("stepCard").innerHTML = `<h2>${s.title}<small>${mode === "imp" ? "进口" : "出口"} ${stepIdx + 1}/${st.length}</small></h2><p>${s.text}</p><ul>${s.points.map((p) => `<li>${p}</li>`).join("")}</ul>${s.bay ? bayPlanHtml() : ""}`;
+  $("stepCard").innerHTML = `<h2>${s.title}<small>${FLOW_NAME[mode]} ${stepIdx + 1}/${st.length}</small></h2><p>${s.text}</p><ul>${s.points.map((p) => `<li>${p}</li>`).join("")}</ul>${s.bay ? bayPlanHtml() : ""}`;
   $("where").innerHTML = "📦 " + s.where;
   $("equip").innerHTML = s.equip.map((k) => `<button data-k="${k}">${INFO[k][0].replace(/（.*）/, "")}</button>`).join("");
   $("prevBtn").disabled = stepIdx === 0;
@@ -1913,6 +2162,7 @@ function setMode(m) {
   mode = m;
   document.querySelectorAll("#modeSeg button").forEach((b) => b.classList.toggle("on", b.dataset.mode === m));
   document.body.classList.toggle("practice", m === "prac");
+  impLabel.textContent = (m === "rail" ? "海铁联运箱 " : "进口箱 ") + IMP_NUM;
   updateLabels();
   if (m === "prac") {
     main.cancel();
@@ -1943,6 +2193,7 @@ function addLabel(text, cls, get, show = () => true) {
   el.className = "lbl " + cls;
   el.textContent = text;
   labelsEl.appendChild(el);
+  return el;
   labels.push({ el, get, show });
 }
 addLabel("集装箱船", "", () => ship.g.localToWorld(V3(-58, 30, 0)));
@@ -1951,9 +2202,11 @@ addLabel("场桥 RTG", "", () => rtgA.g.localToWorld(V3(0, 25, 0)));
 addLabel("堆场 A 区（进出口箱区）", "", () => V3(-40, 13, YA));
 addLabel("闸口", "", () => V3(90, 10, 151));
 addLabel("集装箱货运站", "", () => V3(-40, 13, 143));
+addLabel("铁路装卸线 · 门吊", "", () => rmg.g.localToWorld(V3(0, 25, 0)));
+addLabel("班列", "", () => train.g.localToWorld(V3(WAGON_X - 36, 6, 0)));
 addLabel("内集卡", "", truckPos(itruck), () => itruck.g.visible && mode !== "prac");
 addLabel("外集卡", "", truckPos(etruck), () => etruck.g.visible && mode !== "prac");
-addLabel("进口箱 " + IMP_NUM, "box", () => impBox.getWorldPosition(V3()).add(V3(0, 6.2, 0)), () => impBox.visible);
+const impLabel = addLabel("进口箱 " + IMP_NUM, "box", () => impBox.getWorldPosition(V3()).add(V3(0, 6.2, 0)), () => impBox.visible);
 addLabel("出口箱 " + EXP_NUM, "box exp", () => expBox.getWorldPosition(V3()).add(V3(0, 6.2, 0)), () => expBox.visible);
 function updateLabels() {}
 const _lp = V3();
@@ -2195,20 +2448,24 @@ $("modal").addEventListener("click", (e) => {
   if (!act) return;
   hideModal();
   if (act === "replay") goStep(0);
-  else if (act === "imp" || act === "exp" || act === "prac") setMode(act);
+  else if (act === "imp" || act === "exp" || act === "rail" || act === "prac") setMode(act);
 });
 
 // ---------- 知识点 ----------
 function helpHtml() {
   return `
-  <h2>知识点：集装箱码头作业链</h2>
+  <h2>知识点：集装箱码头换装链</h2>
   <p>一个集装箱在码头要依次经过<b>岸桥、集卡、场桥、堆场、闸口</b>，任何一环慢下来，整条链都会跟着等。</p>
   <div class="kgrid">
     <div class="kcard"><b>岸桥（STS）</b><p>码头前沿，负责装船、卸船。每小时 25–35 箱，决定整条链的节奏。</p></div>
     <div class="kcard"><b>内集卡</b><p>港区内部，在岸桥和场桥之间“水平运输”。</p></div>
     <div class="kcard"><b>场桥（RTG / RMG）</b><p>堆场里收箱、发箱、翻箱，跨 6 排箱 + 1 条车道，堆 4–5 层。</p></div>
+    <div class="kcard"><b>门吊 / 正面吊</b><p>铁路装卸线上把箱子在集卡和铁路平车之间吊装。门吊效率高，正面吊机动灵活。</p></div>
+    <div class="kcard"><b>铁路平车 / 班列</b><p>平车四角有锁头固定箱子，装好加固后按时刻表整列发运。</p></div>
     <div class="kcard"><b>闸口</b><p>港区大门：车牌箱号识别、预约与单证核对、箱体铅封检查、过磅，然后放行。</p></div>
   </div>
+  <h4>海铁换装（船 → 铁路）</h4>
+  <p>卸船 → 水平运输 → 堆场落地堆存 → 按装车计划发箱 → 集卡短驳到铁路装卸线 → 门吊（或正面吊）装上平车 → 加固检查 → 班列发运。箱子不进堆场、直接从船边送去装车叫<b>直取</b>，省一次落地和吊装，但衔接要求更高。</p>
   <h4>进口与出口对比</h4>
   <table class="cmp">
     <tr><th></th><th>进口</th><th>出口</th></tr>
@@ -2235,13 +2492,33 @@ function helpHtml() {
 // ---------- 练习 ----------
 const IMP_ORDER = IMP.map((s) => s.short);
 const EXP_ORDER = EXP.map((s) => s.short);
+const RAIL_ORDER = RAIL.map((s) => s.short);
+const ORDERS = { imp: IMP_ORDER, exp: EXP_ORDER, rail: RAIL_ORDER };
 const PARTS = [
-  { key: "imp", name: "进口排序", max: 30 },
-  { key: "exp", name: "出口排序", max: 30 },
-  { key: "disp", name: "集卡配置", max: 40 },
+  { key: "rail", name: "换装排序", max: 20 },
+  { key: "quiz", name: "换装小题", max: 20 },
+  { key: "imp", name: "进口排序", max: 20 },
+  { key: "exp", name: "出口排序", max: 20 },
+  { key: "disp", name: "集卡配置", max: 20 },
 ];
-const best = { imp: null, exp: null, disp: null };
-let pTab = "imp";
+const best = { rail: null, quiz: null, imp: null, exp: null, disp: null };
+let pTab = "rail";
+// 换装小题（每题 10 分）
+const QUIZ = [
+  {
+    q: "堆场里要装火车的目标箱上面还压着 2 个箱子，场桥每吊一次约 2 分钟。把目标箱取出装上集卡，场桥一共要吊几次、大约多少分钟？",
+    opts: ["1 次，约 2 分钟", "3 次，约 6 分钟", "2 次，约 4 分钟", "5 次，约 10 分钟"],
+    ans: 1,
+    exp: "先把上面 2 个箱子挪开（翻箱 2 次），再吊目标箱 1 次，共 3 次约 6 分钟，是不压箱时的 3 倍。所以堆存时要让先装车的箱子在上层，减少翻箱。",
+  },
+  {
+    q: "下面哪一组设备指派是正确的？",
+    opts: ["岸桥：堆场里堆取箱；场桥：船舶装卸；门吊：装火车", "岸桥：船舶装卸；场桥：堆场里堆取箱；门吊或正面吊：装火车", "空箱堆高机：重箱装火车；岸桥：堆场堆取箱", "场桥：船舶装卸；正面吊：堆场里堆取箱"],
+    ans: 1,
+    exp: "岸桥在码头前沿装卸船，场桥负责堆场堆取箱，铁路装卸线用门吊或正面吊装卸火车；空箱堆高机只能吊空箱。",
+  },
+];
+let quiz = { pick: QUIZ.map(() => null), done: false, score: 0 };
 const shuffle = (a) => {
   const b = a.slice();
   do {
@@ -2254,11 +2531,12 @@ const shuffle = (a) => {
 };
 const sortState = {};
 function newSort(key) {
-  const order = key === "imp" ? IMP_ORDER : EXP_ORDER;
-  sortState[key] = { pool: shuffle(order), slots: Array(order.length).fill(null), done: false, score: 0 };
+  const order = ORDERS[key];
+  sortState[key] = { pool: shuffle(order), slots: Array(order.length).fill(null), done: false, score: 0, ok: 0 };
 }
 newSort("imp");
 newSort("exp");
+newSort("rail");
 // 集卡配置：三轮，每轮从题库里随机抽一组参数
 const DISP_POOL = [
   [{ moves: 30, dist: 1.2, v: 18, yard: 2 }, { moves: 30, dist: 1.5, v: 18, yard: 3 }, { moves: 24, dist: 1.0, v: 15, yard: 3.5 }],
@@ -2358,24 +2636,34 @@ function post(msg) {
 function report() {
   const score = totalScore();
   $("scoreTop").textContent = score + "分";
-  post({ type: "tp:score", score, max: 100, detail: { importOrder: best.imp, exportOrder: best.exp, dispatch: best.disp } });
+  post({ type: "tp:score", score, max: 100, detail: { railOrder: best.rail, railQuiz: best.quiz, importOrder: best.imp, exportOrder: best.exp, dispatch: best.disp } });
   if (PARTS.every((p) => best[p.key] !== null)) post({ type: "tp:complete" });
 }
 function renderPractice() {
   const el = $("prac");
   const tabs = PARTS.map((p) => `<button data-tab="${p.key}" class="${pTab === p.key ? "on" : ""}">${p.name}<b>${best[p.key] === null ? "未做" : best[p.key] + "/" + p.max}</b></button>`).join("");
   let body = "";
-  if (pTab === "imp" || pTab === "exp") {
-    const st = sortState[pTab], order = pTab === "imp" ? IMP_ORDER : EXP_ORDER;
-    body = `<div class="ph">${pTab === "imp" ? "进口" : "出口"}作业排序</div>
-      <div class="pdesc">把下面的作业环节按${pTab === "imp" ? "进口箱从卸船到离港" : "出口箱从进港到装船离港"}的先后顺序排好。点一个环节放进下一个空位，点已放好的格子可以取回。</div>
+  if (ORDERS[pTab]) {
+    const st = sortState[pTab], order = ORDERS[pTab], max = PARTS.find((x) => x.key === pTab).max;
+    const desc = { imp: "进口箱从卸船到离港", exp: "出口箱从进港到装船离港", rail: "海铁联运箱从卸船到班列发运" }[pTab];
+    body = `<div class="ph">${FLOW_NAME[pTab]}作业排序</div>
+      <div class="pdesc">把下面的作业环节按${desc}的先后顺序排好。点一个环节放进下一个空位，点已放好的格子可以取回。</div>
       <div class="slots">${st.slots.map((s, i) => {
         const cls = st.done ? (s === order[i] ? "ok" : "bad") : s ? "fill" : "";
         return `<div class="slot ${cls}" data-slot="${i}"><i>${i + 1}</i><span>${s ?? ""}</span>${st.done && s !== order[i] ? `<span class="ans">应为：${order[i]}</span>` : ""}</div>`;
       }).join("")}</div>
       ${st.done ? "" : `<div class="pool">${st.pool.map((p, i) => `<button data-pool="${i}">${p}</button>`).join("")}</div>`}
-      ${st.done ? `<div class="res ${st.score === 30 ? "good" : st.score >= 18 ? "mid" : "badr"}">排对 ${Math.round((st.score / 30) * order.length)} / ${order.length} 个，得 ${st.score} 分。${st.score === 30 ? "完全正确！" : "对照上面的正确顺序，也可以回去看一遍动画。"}</div>` : ""}
-      <div class="pacts">${st.done ? `<button class="btn" data-pact="resort">再练一次</button><button class="btn" data-pact="watch">看${pTab === "imp" ? "进口" : "出口"}动画</button>` : `<button class="btn" data-pact="clear">清空</button><button class="btn primary" data-pact="submit" ${st.slots.includes(null) ? "disabled" : ""}>提交</button>`}</div>`;
+      ${st.done ? `<div class="res ${st.score === max ? "good" : st.score >= max * 0.6 ? "mid" : "badr"}">排对 ${st.ok} / ${order.length} 个，得 ${st.score} 分。${st.score === max ? "完全正确！" : "对照上面的正确顺序，也可以回去看一遍动画。"}</div>` : ""}
+      <div class="pacts">${st.done ? `<button class="btn" data-pact="resort">再练一次</button><button class="btn" data-pact="watch">看${FLOW_NAME[pTab]}动画</button>` : `<button class="btn" data-pact="clear">清空</button><button class="btn primary" data-pact="submit" ${st.slots.includes(null) ? "disabled" : ""}>提交</button>`}</div>`;
+  } else if (pTab === "quiz") {
+    body = `<div class="ph">换装小题</div><div class="pdesc">每题 10 分，选好后提交。</div>
+      ${QUIZ.map((q, i) => `<div style="margin-bottom:12px"><div style="line-height:1.65;margin-bottom:6px"><b>${i + 1}.</b> ${q.q}</div>
+        <div class="slots">${q.opts.map((o, j) => {
+          const cls = quiz.done ? (j === q.ans ? "ok" : j === quiz.pick[i] ? "bad" : "") : j === quiz.pick[i] ? "fill" : "";
+          return `<div class="slot ${cls}" data-q="${i}" data-o="${j}"><i>${"ABCD"[j]}</i><span>${o}</span></div>`;
+        }).join("")}</div>
+        ${quiz.done ? `<div class="res ${quiz.pick[i] === q.ans ? "good" : "badr"}">${quiz.pick[i] === q.ans ? "✓ 正确。" : "✗ 正确答案是 " + "ABCD"[q.ans] + "。"}${q.exp}</div>` : ""}</div>`).join("")}
+      <div class="pacts">${quiz.done ? `<button class="btn" data-pact="requiz">再做一次</button>` : `<button class="btn primary" data-pact="qsubmit" ${quiz.pick.includes(null) ? "disabled" : ""}>提交</button>`}</div>`;
   } else {
     const p = disp.rounds[disp.round], c = dispCalc(p), r = disp.res[disp.round];
     body = `<div class="ph">岸桥要配几辆集卡？</div>
@@ -2395,7 +2683,7 @@ function renderPractice() {
         <div class="pdesc" style="margin-top:6px">1 小时内：岸桥完成 ${r.sim.moves} 吊，等车 ${fmt(r.sim.idle)} 分钟；集卡排队共 ${fmt(r.sim.queue)} 分钟。</div>` : ""}
       <div class="pacts">${r ? (disp.round < 2 ? `<button class="btn primary" data-pact="nextr">下一题</button>` : `<button class="btn" data-pact="redisp">换一组题再练</button>`) : `<button class="btn primary" data-pact="dsubmit">提交并模拟</button>`}</div>`;
   }
-  el.innerHTML = `<div class="total"><b>${totalScore()}</b><span>/ 100 分 · 进口排序 30 + 出口排序 30 + 集卡配置 40，每部分记最好成绩</span></div><div class="ptabs">${tabs}</div>${body}`;
+  el.innerHTML = `<div class="total"><b>${totalScore()}</b><span>/ 100 分 · 5 个部分各 20 分，每部分记最高分，可反复练习</span></div><div class="ptabs">${tabs}</div>${body}`;
   const r = pTab === "disp" && disp.res[disp.round];
   if (r) {
     const t0 = performance.now();
@@ -2408,10 +2696,14 @@ function renderPractice() {
   }
 }
 $("prac").addEventListener("click", (e) => {
-  const t = e.target.closest("button,[data-slot]");
+  const t = e.target.closest("button,[data-slot],[data-q]");
   if (!t) return;
   if (t.dataset.tab) {
     pTab = t.dataset.tab;
+    return renderPractice();
+  }
+  if (t.dataset.q !== undefined) {
+    if (!quiz.done) quiz.pick[+t.dataset.q] = +t.dataset.o;
     return renderPractice();
   }
   const st = sortState[pTab];
@@ -2433,13 +2725,20 @@ $("prac").addEventListener("click", (e) => {
     st.pool.push(...st.slots.filter(Boolean));
     st.slots.fill(null);
   } else if (a === "submit") {
-    const order = pTab === "imp" ? IMP_ORDER : EXP_ORDER;
+    const order = ORDERS[pTab];
     const ok = st.slots.filter((s, i) => s === order[i]).length;
-    st.score = Math.round((30 * ok) / order.length);
+    st.ok = ok;
+    st.score = Math.round((20 * ok) / order.length);
     st.done = true;
     best[pTab] = Math.max(best[pTab] ?? 0, st.score);
     report();
-  } else if (a === "resort") newSort(pTab);
+  } else if (a === "qsubmit") {
+    quiz.score = QUIZ.reduce((x, q, i) => x + (quiz.pick[i] === q.ans ? 10 : 0), 0);
+    quiz.done = true;
+    best.quiz = Math.max(best.quiz ?? 0, quiz.score);
+    report();
+  } else if (a === "requiz") quiz = { pick: QUIZ.map(() => null), done: false, score: 0 };
+  else if (a === "resort") newSort(pTab);
   else if (a === "watch") return setMode(pTab);
   else if (a === "minus") disp.n = Math.max(1, disp.n - 1);
   else if (a === "plus") disp.n = Math.min(12, disp.n + 1);
@@ -2459,7 +2758,7 @@ $("prac").addEventListener("click", (e) => {
     }
     disp.res[disp.round] = { n, s, msg, sim };
     if (disp.round === 2) {
-      const sc = Math.round((40 * disp.res.reduce((x, r) => x + r.s, 0)) / 3);
+      const sc = Math.round((20 * disp.res.reduce((x, r) => x + r.s, 0)) / 3);
       best.disp = Math.max(best.disp ?? 0, sc);
       report();
     }
@@ -2517,32 +2816,26 @@ addEventListener("keydown", (e) => {
 // ---------- 启动 ----------
 camera.position.set(...OVERVIEW.pos);
 controls.target.set(...OVERVIEW.tgt);
-setMode("imp");
+setMode("rail");
 setPlaying(false);
 showModal(`
-  <h2>集装箱码头作业链</h2>
-  <p>跟着一个集装箱走完码头的整条作业链：<b>岸桥 → 内集卡 → 场桥 / 堆场 → 外集卡 → 闸口</b>。</p>
+  <h2>集装箱码头换装链</h2>
+  <p>跟着一个集装箱走完码头的换装作业：<b>船 → 岸桥 → 堆场 → 集卡短驳 → 门吊 → 铁路平车 → 班列发运</b>，也可以看普通进口、出口流程。</p>
   <h4>怎么用</h4>
   <ul>
-    <li><b>进口流程 / 出口流程</b>：分 8 步播放动画，每步有讲解。可以暂停、单步、倍速。</li>
+    <li><b>海铁换装 / 进口流程 / 出口流程</b>：每条流程 8 步动画，每步有讲解。可以暂停、上一步、下一步、倍速。</li>
     <li>拖动画面旋转视角，滚轮或双指缩放；点任何设备可以看它的名称和作用。</li>
-    <li><b>练习</b>：给作业环节排序，再算一算一台岸桥要配几辆集卡。满分 100 分，成绩会记入平台。</li>
+    <li><b>练习</b>：换装排序、换装小题、进口排序、出口排序、集卡配置，各 20 分，满分 100 分。可以反复练，每部分记最高分，成绩计入平台。</li>
   </ul>
   <div class="acts">
     <button class="btn" data-act="prac">直接练习</button>
-    <button class="btn" data-act="exp">看出口流程</button>
-    <button class="btn primary" data-act="imp-start">看进口流程</button>
+    <button class="btn" data-act="imp">看进口流程</button>
+    <button class="btn primary" data-act="rail">看海铁换装</button>
   </div>`);
-$("modal").addEventListener("click", (e) => {
-  if (e.target.closest("[data-act]")?.dataset.act === "imp-start") {
-    setMode("imp");
-    setPlaying(true);
-  }
-});
 // 弹窗里选“出口流程 / 直接练习”时也开始播放
 $("modal").addEventListener("click", (e) => {
   const a = e.target.closest("[data-act]")?.dataset.act;
-  if (a === "exp" || a === "imp" || a === "replay") setPlaying(true);
+  if (a === "exp" || a === "imp" || a === "rail" || a === "replay") setPlaying(true);
 });
 window.__pc = { goStep, setMode, fast: (k) => (speed = k), info: () => renderer.info.render };
 requestAnimationFrame(frame);
