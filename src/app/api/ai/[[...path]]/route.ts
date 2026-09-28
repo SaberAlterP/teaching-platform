@@ -1,28 +1,31 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { and, asc, eq, inArray, max } from "drizzle-orm";
+import { and, asc, count, eq, inArray, max } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { teacherFromRequest } from "@/lib/api-key";
-import { assertLessonOwner, assertModuleOwner, getTeacherCourse } from "@/lib/course";
+import { assertLessonOwner, assertModuleOwner, createCourse, getTeacherCourse, listTeacherCourses } from "@/lib/course";
 import { cleanupFiles, regradeSubmissions, validateQuiz, writeOrder } from "@/lib/content";
 import { defaultData, type ModuleType, type QuizData } from "@/lib/modules";
 import { MAX_FILE, MAX_PACKAGE, saveFile, savePackage } from "@/lib/storage";
 
-// AI 接口：老师在“AI 接口”页面生成密钥，交给 Claude 等 AI 助手读写本课程内容。
+// AI 接口：老师在“AI 接口”页面生成密钥，交给 Claude 等 AI 助手读写该老师所有课程的内容。
 // 请求头：Authorization: Bearer tpk_...
-// 能做：读课程和课时、新建和修改课时、增删改模块、调整顺序、上传文件和 HTML 包。
+// 能做：列出和新建课程、读课程和课时、新建和修改（包括移课程）课时、增删改模块、调整顺序、上传文件和 HTML 包。
 // 不能：删除课时、访问学生账号和成绩。
 // GET /api/ai 不需要密钥，返回下面的使用说明。
 
 const HELP = {
-  说明: "教学实训平台 AI 接口。除本说明外，所有请求都要带请求头 Authorization: Bearer <密钥>，请求体为 JSON。",
+  说明:
+    "教学实训平台 AI 接口。除本说明外，所有请求都要带请求头 Authorization: Bearer <密钥>，请求体为 JSON。老师可以有多门课程：/course 和新建课时默认操作第一门课，加查询参数 ?course=<课程ID> 指定其他课程。",
   接口: {
-    "GET /api/ai/course": "课程信息和全部课时（含每个课时的模块列表，不含模块内容）",
-    "PATCH /api/ai/course": "{ title?, description? } 修改课程名称、简介",
-    "PUT /api/ai/course/order": "{ ids: [课时ID...] } 调整课时顺序",
-    "POST /api/ai/lessons": "{ title, summary?, modules?: [{ type, title?, data }] } 新建课时（默认草稿状态）",
+    "GET /api/ai/courses": "全部课程列表（id、名称、简介、课时数）",
+    "POST /api/ai/courses": "{ title, description? } 新建课程，返回 id",
+    "GET /api/ai/course?course=<ID>": "课程信息和全部课时（含每个课时的模块列表，不含模块内容）",
+    "PATCH /api/ai/course?course=<ID>": "{ title?, description? } 修改课程名称、简介",
+    "PUT /api/ai/course/order?course=<ID>": "{ ids: [课时ID...] } 调整课时顺序",
+    "POST /api/ai/lessons?course=<ID>": "{ title, summary?, modules?: [{ type, title?, data }] } 在该课程新建课时（默认草稿状态）",
     "GET /api/ai/lessons/:id": "课时详情和全部模块（含习题答案）",
-    "PATCH /api/ai/lessons/:id": "{ title?, summary?, status?: DRAFT|OPEN|SCHEDULED, openAt?: ISO时间 } 修改课时",
+    "PATCH /api/ai/lessons/:id": "{ title?, summary?, status?: DRAFT|OPEN|SCHEDULED, openAt?: ISO时间, courseId? } 修改课时；courseId 把课时移到另一门课程末尾",
     "PUT /api/ai/lessons/:id/order": "{ ids: [模块ID...] } 调整模块顺序（必须包含该课时全部模块）",
     "POST /api/ai/lessons/:id/modules": "{ type, title?, data?, index? } 添加模块，index 为插入位置（默认末尾）",
     "PATCH /api/ai/modules/:id": "{ title?, data? } 修改模块；data 整体替换",
@@ -97,9 +100,25 @@ function done(lessonId?: string) {
 
 async function route(req: Request, method: string, path: string[], t: Teacher) {
   const [a, id, sub] = path;
-  const { course } = await getTeacherCourse(t.id);
+  const { course } = await getTeacherCourse(t.id, new URL(req.url).searchParams.get("course") || undefined);
 
   // ---- 课程 ----
+  if (a === "courses" && !id && method === "GET") {
+    const all = await listTeacherCourses(t.id);
+    const counts = await db
+      .select({ courseId: schema.lessons.courseId, n: count() })
+      .from(schema.lessons)
+      .where(inArray(schema.lessons.courseId, all.map((c) => c.id)))
+      .groupBy(schema.lessons.courseId);
+    const n = new Map(counts.map((c) => [c.courseId, c.n]));
+    return { courses: all.map((c) => ({ id: c.id, title: c.title, description: c.description, lessons: n.get(c.id) ?? 0 })) };
+  }
+  if (a === "courses" && !id && method === "POST") {
+    const b = await body(req);
+    const c = await createCourse(t.id, str(b.title, "title")?.trim() || "新课程", str(b.description, "description") ?? "");
+    done();
+    return { id: c.id };
+  }
   if (a === "course" && !id && method === "GET") {
     const lessons = await db
       .select()
@@ -181,6 +200,12 @@ async function route(req: Request, method: string, path: string[], t: Teacher) {
     const patch: Partial<typeof schema.lessons.$inferInsert> = {};
     if (b.title !== undefined) patch.title = str(b.title, "title")!.trim() || "新课时";
     if (b.summary !== undefined) patch.summary = str(b.summary, "summary");
+    if (b.courseId !== undefined) {
+      const { course: target } = await getTeacherCourse(t.id, str(b.courseId, "courseId"));
+      const [{ m }] = await db.select({ m: max(schema.lessons.order) }).from(schema.lessons).where(eq(schema.lessons.courseId, target.id));
+      patch.courseId = target.id;
+      patch.order = (m ?? -1) + 1;
+    }
     if (b.status !== undefined) {
       if (!["DRAFT", "OPEN", "SCHEDULED"].includes(b.status as string)) throw new ApiError("status 必须是 DRAFT/OPEN/SCHEDULED");
       patch.status = b.status as "DRAFT" | "OPEN" | "SCHEDULED";

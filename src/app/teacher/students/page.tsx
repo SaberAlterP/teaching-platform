@@ -37,7 +37,7 @@ export default async function StudentsPage() {
 
   return (
     <StudentsClient
-      className={cls.name}
+      className={`${course.title} · ${cls.name}`}
       totalModules={totalModules}
       students={students.map((s) => ({
         ...s,

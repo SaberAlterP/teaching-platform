@@ -3,11 +3,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { StatusBadge } from "@/components/StatusBadge";
-import { createLesson, deleteLesson, duplicateLesson, importLesson, reorderLessons } from "./actions";
+import { createLesson, deleteLesson, duplicateLesson, importLesson, moveLesson, reorderLessons } from "./actions";
 
 type L = { id: string; title: string; summary: string; status: string; openAt: string | null; moduleCount: number };
 
-export function LessonList({ lessons: initial }: { lessons: L[] }) {
+export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; otherCourses: { id: string; title: string }[] }) {
   const [lessons, setLessons] = useState(initial);
   useEffect(() => setLessons(initial), [initial]);
   const [drag, setDrag] = useState<number | null>(null);
@@ -81,6 +81,19 @@ export function LessonList({ lessons: initial }: { lessons: L[] }) {
               <Link href={`/teacher/lessons/${l.id}`} className="btn-outline">编辑</Link>
               <Link href={`/teacher/lessons/${l.id}/preview`} className="btn-ghost">预览</Link>
               <button className="btn-ghost" onClick={() => start(() => duplicateLesson(l.id))}>复制</button>
+              {otherCourses.length > 0 && (
+                <select
+                  className="select w-auto py-1.5 text-sm text-slate-600"
+                  value=""
+                  onChange={(e) => {
+                    const c = otherCourses.find((x) => x.id === e.target.value);
+                    if (c && confirm(`把"${l.title}"移到课程"${c.title}"？学生作答会一起带过去。`)) start(() => moveLesson(l.id, c.id));
+                  }}
+                >
+                  <option value="">移到…</option>
+                  {otherCourses.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+                </select>
+              )}
               <button
                 className="btn-danger"
                 onClick={() => confirm(`删除"${l.title}"？其中的模块和学生作答都会被删除。`) && start(() => deleteLesson(l.id))}

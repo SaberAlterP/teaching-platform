@@ -1,8 +1,10 @@
 "use client";
 import { useState } from "react";
-import { updateCourse } from "./actions";
+import { deleteCourse, updateCourse } from "./actions";
 
-export function CourseHeader(p: { title: string; description: string; className: string; students: number; lessons: number }) {
+export function CourseHeader(p: {
+  id: string; title: string; description: string; className: string; students: number; lessons: number; canDelete: boolean;
+}) {
   const [editing, setEditing] = useState(false);
   if (editing)
     return (
@@ -21,6 +23,20 @@ export function CourseHeader(p: { title: string; description: string; className:
         <div className="flex gap-2">
           <button className="btn-primary">保存</button>
           <button type="button" className="btn-ghost" onClick={() => setEditing(false)}>取消</button>
+          {p.canDelete && (
+            <button
+              type="button"
+              className="btn-danger ml-auto"
+              onClick={async () => {
+                if (!confirm(`删除课程"${p.title}"？`)) return;
+                const r = await deleteCourse(p.id);
+                if (r.error) alert(r.error);
+                else setEditing(false);
+              }}
+            >
+              删除这门课
+            </button>
+          )}
         </div>
       </form>
     );
