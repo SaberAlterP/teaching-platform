@@ -3,9 +3,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { StatusBadge } from "@/components/StatusBadge";
+import { groupBySection } from "@/lib/sections";
 import { createLesson, deleteLesson, duplicateLesson, importLesson, moveLesson, reorderLessons } from "./actions";
 
-type L = { id: string; title: string; summary: string; status: string; openAt: string | null; moduleCount: number };
+type L = { id: string; title: string; summary: string; section: string; status: string; openAt: string | null; moduleCount: number };
 
 export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; otherCourses: { id: string; title: string }[] }) {
   const [lessons, setLessons] = useState(initial);
@@ -13,6 +14,9 @@ export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; o
   const [drag, setDrag] = useState<number | null>(null);
   const [, start] = useTransition();
   const [adding, setAdding] = useState(false);
+  const [folded, setFolded] = useState<Set<string>>(new Set());
+  const groups = groupBySection(lessons);
+  const grouped = groups.some((g) => g.section);
   const fileRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -55,8 +59,25 @@ export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; o
       {lessons.length === 0 ? (
         <div className="card p-10 text-center text-slate-500">还没有课时，点击右上角“新建课时”开始。</div>
       ) : (
+        <div className="space-y-4">
+          {groups.map((g, gi) => {
+            const key = `${gi}:${g.section}`;
+            const isFolded = folded.has(key);
+            return (
+              <div key={key} className="space-y-2">
+                {grouped && (
+                  <button
+                    className="flex w-full items-center gap-2 px-1 text-left"
+                    onClick={() => setFolded((f) => { const n = new Set(f); if (n.has(key)) n.delete(key); else n.add(key); return n; })}
+                  >
+                    <span className={`text-slate-400 transition ${isFolded ? "" : "rotate-90"}`}>▶</span>
+                    <span className="font-bold text-slate-700">{g.section || "未分组"}</span>
+                    <span className="text-sm text-slate-400">{g.items.length} 课</span>
+                  </button>
+                )}
+                {!isFolded && (
         <ul className="space-y-2">
-          {lessons.map((l, i) => (
+          {g.items.map(({ item: l, index: i }) => (
             <li
               key={l.id}
               draggable
@@ -103,6 +124,11 @@ export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; o
             </li>
           ))}
         </ul>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
     </section>
   );

@@ -15,6 +15,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     format: "teaching-platform/lesson@1",
     title: lesson.title,
     summary: lesson.summary,
+    section: lesson.section,
     modules: mods.map((m) => ({ type: m.type, title: m.title, data: m.data })),
   };
   return new Response(JSON.stringify(body, null, 2), {

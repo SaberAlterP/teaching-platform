@@ -23,9 +23,9 @@ const HELP = {
     "GET /api/ai/course?course=<ID>": "课程信息和全部课时（含每个课时的模块列表，不含模块内容）",
     "PATCH /api/ai/course?course=<ID>": "{ title?, description? } 修改课程名称、简介",
     "PUT /api/ai/course/order?course=<ID>": "{ ids: [课时ID...] } 调整课时顺序",
-    "POST /api/ai/lessons?course=<ID>": "{ title, summary?, modules?: [{ type, title?, data }] } 在该课程新建课时（默认草稿状态）",
+    "POST /api/ai/lessons?course=<ID>": "{ title, summary?, section?, modules?: [{ type, title?, data }] } 在该课程新建课时（默认草稿状态）；section 是所属模块名，课时列表把相邻、同名的课时折叠成一组",
     "GET /api/ai/lessons/:id": "课时详情和全部模块（含习题答案）",
-    "PATCH /api/ai/lessons/:id": "{ title?, summary?, status?: DRAFT|OPEN|SCHEDULED, openAt?: ISO时间, courseId? } 修改课时；courseId 把课时移到另一门课程末尾",
+    "PATCH /api/ai/lessons/:id": "{ title?, summary?, section?, status?: DRAFT|OPEN|SCHEDULED, openAt?: ISO时间, courseId? } 修改课时；courseId 把课时移到另一门课程末尾",
     "PUT /api/ai/lessons/:id/order": "{ ids: [模块ID...] } 调整模块顺序（必须包含该课时全部模块）",
     "POST /api/ai/lessons/:id/modules": "{ type, title?, data?, index? } 添加模块，index 为插入位置（默认末尾）",
     "PATCH /api/ai/modules/:id": "{ title?, data? } 修改模块；data 整体替换",
@@ -135,7 +135,7 @@ async function route(req: Request, method: string, path: string[], t: Teacher) {
     return {
       course: { id: course.id, title: course.title, description: course.description },
       lessons: lessons.map((l) => ({
-        id: l.id, title: l.title, summary: l.summary, status: l.status, openAt: l.openAt, updatedAt: l.updatedAt,
+        id: l.id, title: l.title, summary: l.summary, section: l.section, status: l.status, openAt: l.openAt, updatedAt: l.updatedAt,
         modules: mods.filter((m) => m.lessonId === l.id).map((m) => ({ id: m.id, type: m.type, title: m.title })),
       })),
     };
@@ -177,7 +177,7 @@ async function route(req: Request, method: string, path: string[], t: Teacher) {
     const l = await db.transaction(async (tx) => {
       const [l] = await tx
         .insert(schema.lessons)
-        .values({ courseId: course.id, title: str(b.title, "title")?.trim() || "新课时", summary: str(b.summary, "summary") ?? "", order: (m ?? -1) + 1 })
+        .values({ courseId: course.id, title: str(b.title, "title")?.trim() || "新课时", summary: str(b.summary, "summary") ?? "", section: str(b.section, "section")?.trim() ?? "", order: (m ?? -1) + 1 })
         .returning();
       if (checked.length)
         await tx.insert(schema.modules).values(checked.map((x, i) => ({ lessonId: l.id, order: i, ...x })));
@@ -190,7 +190,7 @@ async function route(req: Request, method: string, path: string[], t: Teacher) {
     const l = await assertLessonOwner(id, t.id);
     const mods = await db.query.modules.findMany({ where: eq(schema.modules.lessonId, id), orderBy: asc(schema.modules.order) });
     return {
-      id: l.id, title: l.title, summary: l.summary, status: l.status, openAt: l.openAt,
+      id: l.id, title: l.title, summary: l.summary, section: l.section, status: l.status, openAt: l.openAt,
       modules: mods.map((x) => ({ id: x.id, type: x.type, title: x.title, data: x.data })),
     };
   }
@@ -200,6 +200,7 @@ async function route(req: Request, method: string, path: string[], t: Teacher) {
     const patch: Partial<typeof schema.lessons.$inferInsert> = {};
     if (b.title !== undefined) patch.title = str(b.title, "title")!.trim() || "新课时";
     if (b.summary !== undefined) patch.summary = str(b.summary, "summary");
+    if (b.section !== undefined) patch.section = str(b.section, "section")!.trim();
     if (b.courseId !== undefined) {
       const { course: target } = await getTeacherCourse(t.id, str(b.courseId, "courseId"));
       const [{ m }] = await db.select({ m: max(schema.lessons.order) }).from(schema.lessons).where(eq(schema.lessons.courseId, target.id));

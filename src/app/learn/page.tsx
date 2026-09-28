@@ -3,6 +3,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireStudent } from "@/lib/auth";
 import { studentCourseIds, visibleLessonsFor } from "@/lib/course";
+import { groupBySection } from "@/lib/sections";
 
 export default async function LearnHome() {
   const u = await requireStudent();
@@ -77,8 +78,10 @@ export default async function LearnHome() {
           .map(({ c, items }) => (
             <section key={c.id} className="space-y-3">
               {courses.length > 1 && <h2 className="text-lg font-bold">{c.title}</h2>}
+              {groupBySection(items.map((s) => ({ ...s, section: s.lesson.section }))).map((g, gi) => {
+                const grid = (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {items.map(({ lesson: l, done: d, total, pct }, i) => (
+                {g.items.map(({ item: { lesson: l, done: d, total, pct }, index: i }) => (
                   <Link key={l.id} href={`/learn/${l.id}`} className="card group flex flex-col p-5 transition hover:-translate-y-0.5 hover:border-brand-500 hover:shadow-md">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-semibold text-brand-600">第 {i + 1} 课</span>
@@ -104,6 +107,20 @@ export default async function LearnHome() {
                   </Link>
                 ))}
               </div>
+                );
+                if (!g.section) return <div key={gi}>{grid}</div>;
+                const gDone = g.items.filter((x) => x.item.pct === 100).length;
+                return (
+                  <details key={gi} open={gDone < g.items.length} className="group/sec space-y-3">
+                    <summary className="flex cursor-pointer list-none items-center gap-2 py-1 select-none">
+                      <span className="text-slate-400 transition group-open/sec:rotate-90">▶</span>
+                      <span className="font-bold text-slate-700">{g.section}</span>
+                      <span className="text-sm text-slate-400">已完成 {gDone}/{g.items.length} 课</span>
+                    </summary>
+                    <div className="pt-1">{grid}</div>
+                  </details>
+                );
+              })}
             </section>
           ))
       )}

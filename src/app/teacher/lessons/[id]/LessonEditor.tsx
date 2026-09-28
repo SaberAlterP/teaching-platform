@@ -6,7 +6,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { addModule, deleteModule, duplicateModule, reorderModules, setLessonStatus, updateLesson } from "../../actions";
 import { ModuleCard, type EditorModule, type PackageMap } from "./ModuleCard";
 
-type LessonInfo = { id: string; title: string; summary: string; status: string; openAt: string | null };
+type LessonInfo = { id: string; title: string; summary: string; section: string; status: string; openAt: string | null };
 
 const TYPE_ICONS: Record<ModuleType, string> = { RICHTEXT: "📝", MEDIA: "🖼️", QUIZ: "✅", HTML: "🎮" };
 
@@ -14,10 +14,12 @@ export function LessonEditor({
   lesson,
   modules: initial,
   packages: initialPkgs,
+  sections,
 }: {
   lesson: LessonInfo;
   modules: EditorModule[];
   packages: PackageMap;
+  sections: string[];
 }) {
   const [mods, setMods] = useState(initial);
   const [pkgs, setPkgs] = useState(initialPkgs);
@@ -54,7 +56,7 @@ export function LessonEditor({
           <Link href="/teacher" className="hover:text-brand-600">← 课时列表</Link>
           {pending && <span className="ml-auto text-xs">保存中…</span>}
         </div>
-        <LessonMeta lesson={lesson} />
+        <LessonMeta lesson={lesson} sections={sections} />
 
         <div>
         <AddBar onAdd={(t) => add(t, 0)} compact={mods.length > 0} />
@@ -139,11 +141,12 @@ function AddBar({ onAdd, compact }: { onAdd: (t: ModuleType) => void; compact?: 
   );
 }
 
-function LessonMeta({ lesson }: { lesson: LessonInfo }) {
+function LessonMeta({ lesson, sections }: { lesson: LessonInfo; sections: string[] }) {
   const [title, setTitle] = useState(lesson.title);
   const [summary, setSummary] = useState(lesson.summary);
+  const [section, setSection] = useState(lesson.section);
   const [, start] = useTransition();
-  const dirty = title !== lesson.title || summary !== lesson.summary;
+  const dirty = title !== lesson.title || summary !== lesson.summary || section !== lesson.section;
   return (
     <div className="card space-y-2 p-5">
       <input
@@ -158,9 +161,22 @@ function LessonMeta({ lesson }: { lesson: LessonInfo }) {
         className="w-full bg-transparent text-slate-500 outline-none"
         placeholder="一句话简介（学生在课程列表里看到）"
       />
+      <label className="flex items-center gap-2 text-sm text-slate-500">
+        <span className="shrink-0">所属模块</span>
+        <input
+          value={section}
+          onChange={(e) => setSection(e.target.value)}
+          list="lesson-sections"
+          className="input py-1.5"
+          placeholder="例如：模块一 智慧运输认知与职业基础（留空则不分组）"
+        />
+        <datalist id="lesson-sections">
+          {sections.map((s) => <option key={s} value={s} />)}
+        </datalist>
+      </label>
       {dirty && (
-        <button className="btn-primary" onClick={() => start(() => updateLesson(lesson.id, { title, summary }))}>
-          保存标题和简介
+        <button className="btn-primary" onClick={() => start(() => updateLesson(lesson.id, { title, summary, section: section.trim() }))}>
+          保存
         </button>
       )}
     </div>
