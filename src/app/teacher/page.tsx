@@ -7,7 +7,7 @@ import { CourseHeader } from "./CourseHeader";
 
 export default async function TeacherHome() {
   const t = await requireTeacher();
-  const { course, cls } = await getTeacherCourse(t.id);
+  const { course, cls, courses } = await getTeacherCourse(t.id);
   const lessons = await db
     .select({
       id: schema.lessons.id,
@@ -35,13 +35,17 @@ export default async function TeacherHome() {
   return (
     <div className="space-y-6">
       <CourseHeader
+        key={course.id}
+        id={course.id}
         title={course.title}
         description={course.description}
         className={cls.name}
         students={students}
         lessons={lessons.length}
+        canDelete={courses.length > 1 && lessons.length === 0 && students === 0}
       />
       <LessonList
+        otherCourses={courses.filter((c) => c.id !== course.id).map((c) => ({ id: c.id, title: c.title }))}
         lessons={lessons.map((l) => ({ ...l, moduleCount: countMap.get(l.id) ?? 0, openAt: l.openAt?.toISOString() ?? null, updatedAt: l.updatedAt.toISOString() }))}
       />
     </div>

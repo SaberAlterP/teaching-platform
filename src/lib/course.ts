@@ -1,16 +1,40 @@
 import "server-only";
+import { cookies } from "next/headers";
 import { and, asc, eq, inArray, lte, or } from "drizzle-orm";
 import { db, schema } from "@/db";
 
-// 第一期：每位老师一门课、一个班。以后做多课程时，这里改成读取"当前选中的课程"即可。
-export async function getTeacherCourse(teacherId: string) {
-  let course = await db.query.courses.findFirst({
+export const COURSE_COOKIE = "tp_course";
+
+// 老师的全部课程（按创建时间）
+export function listTeacherCourses(teacherId: string) {
+  return db.query.courses.findMany({
     where: eq(schema.courses.teacherId, teacherId),
     orderBy: asc(schema.courses.createdAt),
   });
-  if (!course) {
-    [course] = await db.insert(schema.courses).values({ title: "我的课程", teacherId }).returning();
+}
+
+// 新建课程，同时建一个默认班级
+export async function createCourse(teacherId: string, title: string, description = "") {
+  return db.transaction(async (tx) => {
+    const [course] = await tx.insert(schema.courses).values({ title, description, teacherId }).returning();
+    await tx.insert(schema.classes).values({ name: "默认班级", courseId: course.id });
+    return course;
+  });
+}
+
+// 老师当前操作的课程和班级。
+// courseId 显式传入时（AI 接口）必须是自己的课程；否则读取页面上选中的课程（Cookie），没有就用第一门。
+export async function getTeacherCourse(teacherId: string, courseId?: string) {
+  const all = await listTeacherCourses(teacherId);
+  let course;
+  if (courseId) {
+    course = all.find((c) => c.id === courseId);
+    if (!course) throw new Error("课程不存在或无权限");
+  } else {
+    const selected = (await cookies()).get(COURSE_COOKIE)?.value;
+    course = all.find((c) => c.id === selected) ?? all[0];
   }
+  if (!course) course = await createCourse(teacherId, "我的课程");
   let cls = await db.query.classes.findFirst({
     where: eq(schema.classes.courseId, course.id),
     orderBy: asc(schema.classes.createdAt),
@@ -18,7 +42,7 @@ export async function getTeacherCourse(teacherId: string) {
   if (!cls) {
     [cls] = await db.insert(schema.classes).values({ name: "默认班级", courseId: course.id }).returning();
   }
-  return { course, cls };
+  return { course, cls, courses: all.length ? all : [course] };
 }
 
 // 老师必须拥有该课时才能操作

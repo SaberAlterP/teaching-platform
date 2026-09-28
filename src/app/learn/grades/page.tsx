@@ -8,6 +8,10 @@ import { MODULE_LABELS, type HtmlData, type QuizData } from "@/lib/modules";
 export default async function GradesPage() {
   const u = await requireStudent();
   const lessons = await visibleLessonsFor(u.id);
+  const courseIds = [...new Set(lessons.map((l) => l.courseId))];
+  const courses = courseIds.length ? await db.select().from(schema.courses).where(inArray(schema.courses.id, courseIds)) : [];
+  const courseTitle = new Map(courses.map((c) => [c.id, c.title]));
+  const multi = courses.length > 1;
   const ids = lessons.map((l) => l.id);
   const mods = ids.length ? await db.select().from(schema.modules).where(inArray(schema.modules.lessonId, ids)) : [];
   const scored = mods.filter((m) => m.type === "QUIZ" || (m.type === "HTML" && (m.data as unknown as HtmlData).scored));
@@ -41,6 +45,7 @@ export default async function GradesPage() {
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-slate-500">
             <tr>
+              {multi && <th className="px-4 py-2.5 font-medium">课程</th>}
               <th className="px-4 py-2.5 font-medium">课时</th>
               <th className="px-4 py-2.5 font-medium">项目</th>
               <th className="px-4 py-2.5 font-medium">得分</th>
@@ -50,6 +55,7 @@ export default async function GradesPage() {
           <tbody className="divide-y divide-slate-100">
             {rows.map(({ lesson, m, s, max }) => (
               <tr key={m.id}>
+                {multi && <td className="px-4 py-2.5 text-slate-500">{courseTitle.get(lesson.courseId)}</td>}
                 <td className="px-4 py-2.5">
                   <Link href={`/learn/${lesson.id}#m-${m.id}`} className="hover:text-brand-600">{lesson.title}</Link>
                 </td>
@@ -67,7 +73,7 @@ export default async function GradesPage() {
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400">暂无计分项目</td></tr>
+              <tr><td colSpan={multi ? 5 : 4} className="px-4 py-8 text-center text-slate-400">暂无计分项目</td></tr>
             )}
           </tbody>
         </table>
