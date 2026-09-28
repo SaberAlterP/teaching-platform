@@ -224,6 +224,11 @@ function HtmlModule({
   if (!m.packageUrl) return <div className="rounded-lg bg-slate-100 p-8 text-center text-slate-400">内容未上传</div>;
   return (
     <div className="space-y-2">
+      {preview && (
+        <div className="text-right text-sm">
+          <a href={`/api/packages/${d.assetId}/download`} className="text-brand-700 hover:underline" download>下载 HTML 包</a>
+        </div>
+      )}
       {(d.note || d.scored) && (
         <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
           {d.note && <span>{d.note}</span>}
