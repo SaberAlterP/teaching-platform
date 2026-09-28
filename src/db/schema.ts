@@ -130,6 +130,18 @@ export const assets = pgTable("assets", {
   createdAt: createdAt(),
 });
 
+// AI 接口密钥：老师生成后交给 Claude 等 AI 助手，用来通过 /api/ai 读写课程内容。
+// 只保存哈希；明文只在生成时显示一次。
+export const apiKeys = pgTable("api_keys", {
+  id: id(),
+  teacherId: text("teacher_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull().default(""),
+  keyHash: text("key_hash").notNull().unique(),
+  prefix: text("prefix").notNull(), // 密钥开头几位，方便老师辨认
+  createdAt: createdAt(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+});
+
 export const lessonsRelations = relations(lessons, ({ many }) => ({ modules: many(modules) }));
 export const modulesRelations = relations(modules, ({ one }) => ({
   lesson: one(lessons, { fields: [modules.lessonId], references: [lessons.id] }),
@@ -139,3 +151,4 @@ export type User = typeof users.$inferSelect;
 export type Lesson = typeof lessons.$inferSelect;
 export type Module = typeof modules.$inferSelect;
 export type Submission = typeof submissions.$inferSelect;
+export type ApiKey = typeof apiKeys.$inferSelect;
