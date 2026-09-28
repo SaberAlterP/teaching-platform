@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>集装箱码头作业链 3D</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body { font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; color: #0f172a; background: #dde9f2; font-size: 13px; }
+  button, select, input { font: inherit; }
+  #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+  .top { position: fixed; top: 8px; left: 8px; right: 8px; z-index: 6; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; pointer-events: none; }
+  .top > * { pointer-events: auto; }
+  .brand { font-weight: 700; font-size: 15px; background: rgba(255,255,255,.92); padding: 6px 12px; border-radius: 10px; box-shadow: 0 2px 8px rgba(15,23,42,.1); }
+  .seg { display: inline-flex; background: rgba(255,255,255,.92); border-radius: 10px; padding: 3px; box-shadow: 0 2px 8px rgba(15,23,42,.1); }
+  .seg button { border: 0; background: none; padding: 5px 10px; border-radius: 8px; cursor: pointer; color: #475569; white-space: nowrap; }
+  .seg button.on { background: #2f6fed; color: #fff; }
+  .seg button .sc { font-size: 11px; opacity: .85; margin-left: 3px; }
+  .spacer { flex: 1; }
+  .btn { border: 0; background: rgba(255,255,255,.92); border-radius: 10px; padding: 6px 12px; cursor: pointer; box-shadow: 0 2px 8px rgba(15,23,42,.1); color: #0f172a; white-space: nowrap; }
+  .btn:hover { background: #fff; }
+  .btn.on { background: #e0ecff; color: #1d4ed8; }
+  .btn.primary { background: #2f6fed; color: #fff; }
+  .btn.primary:hover { background: #2458c5; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  .panel { position: fixed; z-index: 4; background: rgba(255,255,255,.94); backdrop-filter: blur(6px); border-radius: 14px; box-shadow: 0 6px 20px rgba(15,23,42,.12); overflow: auto; }
+  #flowPanel { top: 56px; left: 8px; bottom: 70px; width: 300px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  #steps { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  #steps li { display: flex; gap: 6px; align-items: center; padding: 5px 6px; border-radius: 8px; cursor: pointer; color: #475569; background: #f8fafc; font-size: 12px; line-height: 1.3; }
+  #steps li:hover { background: #eef4ff; }
+  #steps li i { font-style: normal; flex: none; width: 19px; height: 19px; border-radius: 99px; background: #e2e8f0; color: #475569; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+  #steps li.done i { background: #bbf7d0; color: #166534; }
+  #steps li.on { background: #2f6fed; color: #fff; }
+  #steps li.on i { background: #fff; color: #2f6fed; }
+  .card h2 { font-size: 17px; margin-bottom: 6px; display: flex; gap: 8px; align-items: baseline; }
+  .card h2 small { font-size: 12px; font-weight: 600; color: #2f6fed; background: #e0ecff; border-radius: 99px; padding: 1px 8px; }
+  .card p { line-height: 1.75; color: #334155; font-size: 13.5px; }
+  .card ul { margin: 8px 0 0; padding-left: 0; list-style: none; }
+  .card ul li { position: relative; padding-left: 14px; line-height: 1.65; color: #475569; font-size: 12.5px; margin-bottom: 2px; }
+  .card ul li::before { content: ""; position: absolute; left: 2px; top: .7em; width: 5px; height: 5px; border-radius: 99px; background: #2f6fed; }
+  .where { background: #fffbeb; border-radius: 10px; padding: 7px 10px; font-size: 12.5px; color: #78350f; line-height: 1.55; }
+  .where b { color: #92400e; }
+  .equip { display: flex; flex-wrap: wrap; gap: 5px; }
+  .equip button { border: 1px solid #cbd5e1; background: #fff; border-radius: 99px; padding: 2px 10px; font-size: 12px; cursor: pointer; color: #334155; }
+  .equip button:hover { border-color: #2f6fed; color: #2f6fed; }
+  .bay { border-collapse: collapse; margin: 6px auto 2px; font-size: 10px; }
+  .bay td { width: 21px; height: 15px; border: 1px solid #cbd5e1; text-align: center; color: #64748b; }
+  .bay td.f { background: #cbd5e1; }
+  .bay td.t { background: #22c55e; color: #fff; font-weight: 700; }
+  .bay th { font-weight: 400; color: #94a3b8; padding: 0 3px; }
+  .baycap { text-align: center; font-size: 11px; color: #64748b; }
+
+  #ctrl { position: fixed; left: 50%; transform: translateX(-50%); bottom: 10px; z-index: 6; display: flex; gap: 6px; align-items: center; background: rgba(15,23,42,.88); color: #fff; padding: 6px 8px; border-radius: 14px; box-shadow: 0 6px 20px rgba(15,23,42,.2); max-width: calc(100% - 16px); }
+  #ctrl .btn { background: rgba(255,255,255,.14); color: #fff; box-shadow: none; padding: 6px 11px; }
+  #ctrl .btn:hover { background: rgba(255,255,255,.26); }
+  #ctrl .btn.primary { background: #2f6fed; min-width: 74px; }
+  #ctrl .btn.on { background: rgba(47,111,237,.55); }
+  #ctrl .sep { width: 1px; align-self: stretch; background: rgba(255,255,255,.2); margin: 2px 2px; }
+  #ctrl .next-hint { animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 4px rgba(47,111,237,.45); } }
+
+  #labels { position: fixed; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
+  .lbl { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); background: rgba(15,23,42,.78); color: #fff; font-size: 12px; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+  .lbl::after { content: ""; position: absolute; left: 50%; bottom: -4px; margin-left: -4px; border: 4px solid transparent; border-bottom: 0; border-top-color: rgba(15,23,42,.78); }
+  .lbl.box { background: #d97706; }
+  .lbl.box::after { border-top-color: #d97706; }
+  .lbl.exp { background: #16a34a; }
+  .lbl.exp::after { border-top-color: #16a34a; }
+  body.nolabels .lbl { display: none; }
+  #badges { position: fixed; z-index: 5; left: 0; top: 0; pointer-events: none; display: flex; flex-direction: column; gap: 4px; transform: translate(-50%, -100%); }
+  #badges div { background: #fff; border-left: 4px solid #22c55e; box-shadow: 0 4px 14px rgba(15,23,42,.18); border-radius: 8px; padding: 5px 10px; font-size: 13px; white-space: nowrap; animation: pop .3s ease-out; }
+  #badges div.info { border-left-color: #2f6fed; }
+  @keyframes pop { from { opacity: 0; transform: translateY(6px); } }
+
+  #info { position: fixed; z-index: 7; width: 270px; background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(15,23,42,.25); padding: 12px 14px; display: none; }
+  #info.show { display: block; }
+  #info h4 { font-size: 15px; margin-bottom: 4px; padding-right: 20px; }
+  #info p { line-height: 1.7; color: #334155; font-size: 13px; }
+  #info .x { position: absolute; right: 8px; top: 6px; border: 0; background: none; font-size: 18px; color: #94a3b8; cursor: pointer; }
+
+  #toast { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 9; background: #0f172a; color: #fff; padding: 8px 14px; border-radius: 10px; opacity: 0; transition: opacity .25s; pointer-events: none; max-width: 80%; text-align: center; }
+  #toast.show { opacity: .92; }
+
+  /* 练习 */
+  #prac { top: 56px; right: 8px; bottom: 10px; width: 470px; padding: 14px 16px; display: none; }
+  body.practice #prac { display: block; }
+  body.practice #flowPanel, body.practice #ctrl, body.practice #badges { display: none; }
+  .ptabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .ptabs button { border: 1px solid #cbd5e1; background: #fff; border-radius: 10px; padding: 6px 10px; cursor: pointer; color: #334155; }
+  .ptabs button.on { border-color: #2f6fed; background: #2f6fed; color: #fff; }
+  .ptabs button b { font-weight: 600; margin-left: 4px; font-size: 12px; opacity: .85; }
+  .total { display: flex; align-items: baseline; gap: 8px; background: #f1f5f9; border-radius: 12px; padding: 8px 12px; margin-bottom: 12px; color: #475569; }
+  .total b { font-size: 28px; color: #2f6fed; line-height: 1; }
+  .total span { font-size: 12px; }
+  .ph { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .pdesc { color: #475569; line-height: 1.65; margin-bottom: 10px; font-size: 13px; }
+  .slots { display: grid; gap: 5px; margin-bottom: 10px; }
+  .slot { display: flex; gap: 8px; align-items: center; min-height: 34px; border: 2px dashed #cbd5e1; border-radius: 10px; padding: 4px 8px; background: #f8fafc; cursor: pointer; }
+  .slot i { font-style: normal; width: 22px; height: 22px; border-radius: 99px; background: #e2e8f0; display: grid; place-items: center; font-weight: 700; font-size: 12px; color: #475569; flex: none; }
+  .slot.fill { border-style: solid; border-color: #93c5fd; background: #eff6ff; }
+  .slot.ok { border-color: #86efac; background: #f0fdf4; }
+  .slot.ok i { background: #22c55e; color: #fff; }
+  .slot.bad { border-color: #fca5a5; background: #fef2f2; }
+  .slot.bad i { background: #ef4444; color: #fff; }
+  .slot .ans { margin-left: auto; font-size: 12px; color: #166534; white-space: nowrap; }
+  .pool { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; min-height: 34px; }
+  .pool button { border: 1px solid #cbd5e1; background: #fff; border-radius: 10px; padding: 6px 10px; cursor: pointer; box-shadow: 0 1px 3px rgba(15,23,42,.08); }
+  .pool button:hover { border-color: #2f6fed; color: #2f6fed; }
+  .pacts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pacts .btn { box-shadow: none; background: #f1f5f9; }
+  .pacts .btn.primary { background: #2f6fed; color: #fff; }
+  .res { border-radius: 10px; padding: 8px 12px; margin: 10px 0; line-height: 1.7; }
+  .res.good { background: #f0fdf4; color: #166534; }
+  .res.mid { background: #fffbeb; color: #92400e; }
+  .res.badr { background: #fef2f2; color: #991b1b; }
+  table.params { width: 100%; border-collapse: collapse; margin: 6px 0 10px; }
+  table.params td { padding: 6px 4px; border-bottom: 1px solid #e2e8f0; }
+  table.params td:last-child { text-align: right; font-weight: 600; }
+  .stepper { display: flex; align-items: center; gap: 8px; margin: 6px 0 10px; }
+  .stepper button { width: 34px; height: 34px; border-radius: 10px; border: 1px solid #cbd5e1; background: #fff; font-size: 18px; cursor: pointer; }
+  .stepper b { font-size: 24px; min-width: 44px; text-align: center; }
+  #gantt { width: 100%; display: block; border-radius: 8px; background: #f8fafc; margin-top: 6px; }
+  .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11.5px; color: #475569; margin-top: 4px; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; background: var(--c); }
+  .rounds { display: flex; gap: 6px; margin-bottom: 8px; }
+  .rounds span { font-size: 12px; padding: 2px 10px; border-radius: 99px; background: #e2e8f0; color: #475569; }
+  .rounds span.on { background: #2f6fed; color: #fff; }
+  .rounds span.ok { background: #bbf7d0; color: #166534; }
+  .rounds span.mid { background: #fde68a; color: #92400e; }
+  .rounds span.bad { background: #fecaca; color: #991b1b; }
+
+  #modal { position: fixed; inset: 0; z-index: 20; background: rgba(15,23,42,.45); display: none; align-items: center; justify-content: center; padding: 16px; }
+  #modal.show { display: flex; }
+  .dlg { background: #fff; border-radius: 16px; max-width: 660px; width: 100%; max-height: 100%; overflow: auto; padding: 22px 24px; box-shadow: 0 20px 50px rgba(15,23,42,.3); }
+  .dlg h2 { font-size: 20px; margin-bottom: 10px; }
+  .dlg h4 { font-size: 14px; margin: 14px 0 4px; }
+  .dlg p, .dlg li { line-height: 1.75; color: #334155; font-size: 14px; }
+  .dlg ul { padding-left: 20px; }
+  .dlg .acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
+  .dlg .acts .btn { box-shadow: none; background: #f1f5f9; padding: 8px 16px; }
+  .dlg .acts .btn.primary { background: #2f6fed; color: #fff; }
+  .kgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+  .kcard { background: #f8fafc; border-radius: 12px; padding: 10px 12px; }
+  .kcard > b { display: block; margin-bottom: 2px; }
+  .kcard p { font-size: 13px; line-height: 1.65; }
+  table.cmp { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+  table.cmp th, table.cmp td { border: 1px solid #e2e8f0; padding: 5px 7px; text-align: left; line-height: 1.5; vertical-align: top; }
+  table.cmp th { background: #f1f5f9; }
+  .formula { background: #eef4ff; border-radius: 10px; padding: 8px 12px; margin: 6px 0; color: #1e3a8a; line-height: 1.7; }
+
+  #flowToggle { display: none; }
+
+  @media (max-width: 860px), (max-height: 560px) {
+    .brand { display: none; }
+    #flowPanel { top: auto; left: 8px; right: 8px; bottom: 62px; width: auto; max-height: 42%; display: none; }
+    #flowPanel.open { display: flex; }
+    #flowToggle { display: inline-block; }
+    #ctrl { left: 8px; right: 8px; transform: none; overflow-x: auto; bottom: 6px; }
+    #ctrl .btn { padding: 6px 9px; }
+    #ctrl .hide-s { display: none; }
+    #prac { left: 8px; right: 8px; width: auto; top: auto; height: 62%; }
+    .kgrid { grid-template-columns: 1fr; }
+    #info { left: 8px !important; right: 8px; top: 56px !important; width: auto; }
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+<div id="badges"></div>
+
+<div class="top">
+  <div class="brand">集装箱码头作业链</div>
+  <div class="seg" id="modeSeg">
+    <button data-mode="imp">进口流程</button>
+    <button data-mode="exp">出口流程</button>
+    <button data-mode="prac">练习<span class="sc" id="scoreTop"></span></button>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn" id="flowToggle">步骤</button>
+  <button class="btn" id="viewAll">全景</button>
+  <button class="btn on" id="camBtn" title="镜头自动跟随作业">跟随镜头</button>
+  <button class="btn on" id="lblBtn">标签</button>
+  <button class="btn on" id="ambBtn" title="海浪、海鸥、背景作业等环境动效">环境动效</button>
+  <button class="btn" id="helpBtn">知识点</button>
+</div>
+
+<aside class="panel" id="flowPanel">
+  <ol id="steps"></ol>
+  <div class="card" id="stepCard"></div>
+  <div class="where" id="where"></div>
+  <div>
+    <div style="font-size:12px;color:#64748b;margin-bottom:5px">本步用到的设备（点一下看介绍）</div>
+    <div class="equip" id="equip"></div>
+  </div>
+</aside>
+
+<div id="ctrl">
+  <button class="btn" id="prevBtn">上一步</button>
+  <button class="btn primary" id="playBtn">暂停</button>
+  <button class="btn" id="nextBtn">下一步</button>
+  <button class="btn hide-s" id="replayBtn">重播本步</button>
+  <div class="sep"></div>
+  <button class="btn" id="speedBtn">1 倍速</button>
+  <button class="btn on" id="autoBtn" title="一步放完自动进入下一步">自动连播</button>
+</div>
+
+<aside class="panel" id="prac"></aside>
+
+<div id="info"><button class="x" id="infoX">×</button><h4 id="infoT"></h4><p id="infoP"></p></div>
+<div id="toast"></div>
+<div id="modal"><div class="dlg" id="dlg"></div></div>
+
+<script>/*BUNDLE*/</script>
+</body>
+</html>
