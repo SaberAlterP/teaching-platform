@@ -1,4 +1,4 @@
-// 装车配载 3D 模拟：自由练习 + 三关任务（轻重配装、家电与易碎品、重心控制）
+// 装车配载 3D 模拟：自由练习 + 三关任务（轻重配装、家电与易碎品、重心控制）+ 轴荷与侧翻风险 + 随堂小问
 // 构建：npm run demo:build  → demo-content/dist/装车配载-3D.html（单文件，可直接上传到平台）
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -18,6 +18,20 @@ const CONTAINERS = {
   gp40: { name: "40 尺普通箱（40GP）", short: "40GP", L: 12.03, W: 2.35, H: 2.39, payload: 26500, kind: "box" },
   van: { name: "9.6 米厢式货车", short: "9.6 米货车", L: 9.6, W: 2.3, H: 2.5, payload: 18000, kind: "truck" },
 };
+// 轴荷（教学示意值）：前、后支点在车厢坐标里的位置（米，0 为里端），车辆和箱体自重分到前后的吨数，前后限值（吨）
+// 集装箱按装在半挂车上计算：前支点为牵引车鞍座，后支点为挂车轴组
+const AXLES = {
+  gp20: { fx: 0.9, rx: 4.4, tf: 3.0, tr: 4.0, lf: 13, lr: 18, nf: "前端（鞍座）", nr: "后轴组（挂车）" },
+  gp40: { fx: 1.0, rx: 10.43, tf: 4.0, tr: 5.0, lf: 18, lr: 22, nf: "前端（鞍座）", nr: "后轴组（挂车）" },
+  van: { fx: -1.3, rx: 6.41, tf: 4.5, tr: 3.5, lf: 9, lr: 18, nf: "前轴", nr: "后轴组" },
+};
+// 杠杆原理：货物重心离哪个支点越近，那个支点分到的重量越多
+function axleLoads(key, kgCargo, cogX) {
+  const a = AXLES[key];
+  const t = kgCargo / 1000;
+  const r = t ? (t * (cogX - a.fx)) / (a.rx - a.fx) : 0;
+  return { ...a, f: a.tf + t - r, r: a.tr + r };
+}
 
 // dims：长 × 宽 × 高（米）；up：不可倒置；fragile：易碎；pallet：带托盘
 const CARGO = {
@@ -106,7 +120,9 @@ sun.shadow.bias = -0.0005;
 scene.add(sun, sun.target);
 
 const root = new THREE.Group(); // 原点在车厢内部地板的里端角（x 向门口，z 向另一侧）
-scene.add(root);
+const tilt = new THREE.Group(); // 侧倾演示时绕车轮外侧着地线转动
+tilt.add(root);
+scene.add(tilt);
 let envGroup = null;
 const boxGroup = new THREE.Group();
 root.add(boxGroup);
@@ -666,10 +682,16 @@ function analyze() {
     }
   }
   if (kg > c.payload) viol.push({ ids: [], text: `超载：${(kg / 1000).toFixed(1)} 吨，超过限重 ${(c.payload / 1000).toFixed(1)} 吨` });
+  const axle = axleLoads(contKey(), kg, cog ? cog.x : c.L / 2);
+  if (axle.f > axle.lf + 1e-6) viol.push({ ids: [], text: `${axle.nf}超载：${axle.f.toFixed(1)} 吨，限值 ${axle.lf} 吨` });
+  if (axle.r > axle.lr + 1e-6) viol.push({ ids: [], text: `${axle.nr}超载：${axle.r.toFixed(1)} 吨，限值 ${axle.lr} 吨` });
   const cap = c.L * c.W * c.H;
   const dx = cog ? cog.x - c.L / 2 : 0, dz = cog ? cog.z - c.W / 2 : 0;
+  // 侧翻风险：看重心横向偏移和重心高度
+  let risk = 0;
+  if (cog) risk = Math.max(Math.abs(dz) / (LIM * c.W), (cog.y / c.H - 0.3) / 0.3);
   return {
-    kg, vol, cap, wr: kg / c.payload, vr: vol / cap, cog, dx, dz,
+    kg, vol, cap, wr: kg / c.payload, vr: vol / cap, cog, dx, dz, axle, risk,
     limX: LIM * c.L, limZ: LIM * c.W,
     cogOk: !cog || (Math.abs(dx) <= LIM * c.L && Math.abs(dz) <= LIM * c.W),
     viol,
@@ -772,6 +794,21 @@ function renderStats() {
       `纵向：${Math.abs(a.dx) < 0.005 ? "居中" : `${dirX} ${Math.abs(a.dx).toFixed(2)} m`}（允许 ±${a.limX.toFixed(2)}）${Math.abs(a.dx) <= a.limX ? '<span class="ok">✓</span>' : '<span class="bad">✗</span>'}<br>` +
       `横向：${Math.abs(a.dz) < 0.005 ? "居中" : `${dirZ} ${Math.abs(a.dz).toFixed(2)} m`}（允许 ±${a.limZ.toFixed(2)}）${Math.abs(a.dz) <= a.limZ ? '<span class="ok">✓</span>' : '<span class="bad">✗</span>'}`;
   } else $("cogTxt").textContent = "装货后显示重心位置。";
+  const axBar = (id, v, lim) => {
+    $(id + "Bar").style.width = Math.min(100, (v / lim) * 100) + "%";
+    $(id + "Bar").style.background = v > lim ? "#ef4444" : v > lim * 0.9 ? "#f59e0b" : "#22c55e";
+    $(id + "Txt").innerHTML = `<span class="${v > lim ? "bad" : ""}">${v.toFixed(1)}</span> / ${a.axle[id === "af" ? "lf" : "lr"]} t`;
+  };
+  $("afName").textContent = a.axle.nf;
+  $("arName").textContent = a.axle.nr;
+  axBar("af", a.axle.f, a.axle.lf);
+  axBar("ar", a.axle.r, a.axle.lr);
+  $("axleNote").textContent = "含车辆自重，示意限值";
+  const rk = !a.cog ? 0 : a.risk > 1 ? 2 : a.risk > 0.6 ? 1 : 0;
+  $("riskBox").className = "risk" + (rk === 2 ? " high" : rk === 1 ? " mid" : "");
+  $("riskBox").innerHTML =
+    `<span>侧翻风险：<b>${["低", "中", "高"][rk]}</b>${!a.cog ? "" : rk ? (Math.abs(a.dz) / a.limZ > (a.cog.y / c.H - 0.3) / 0.3 ? "，重心偏向一侧" : "，重心偏高") : ""}</span>` +
+    (a.cog ? `<button id="tiltBtn">侧倾演示</button>` : "");
   $("viol").innerHTML = a.viol.length
     ? a.viol.map((v) => `<li>${v.text}</li>`).join("")
     : `<li class="none">${a.kg ? "没有发现违规，继续保持。" : "装货后会自动检查：重压轻、易碎品受压、倒置、超载。"}</li>`;
@@ -801,7 +838,7 @@ function drawMini(a) {
   const W = cv.clientWidth || 238;
   const pad = 14;
   const s = (W - pad * 2) / c.L;
-  const H = Math.round(c.W * s + pad * 2);
+  const H = Math.round(c.W * s + pad * 2 + 4);
   const dpr = Math.min(devicePixelRatio, 2);
   cv.width = W * dpr;
   cv.height = H * dpr;
@@ -837,6 +874,18 @@ function drawMini(a) {
   g.fillText("里端", pad, pad / 2 + 1);
   g.textAlign = "right";
   g.fillText("门端", pad + c.L * s, pad / 2 + 1);
+  // 前后支点（轴位）
+  const ax = AXLES[contKey()];
+  g.fillStyle = "#475569";
+  for (const x of [ax.fx, ax.rx]) {
+    if (x < 0 || x > c.L) continue;
+    const px = pad + x * s, py = pad + c.W * s + 2;
+    g.beginPath();
+    g.moveTo(px, py);
+    g.lineTo(px - 4, py + 7);
+    g.lineTo(px + 4, py + 7);
+    g.fill();
+  }
   if (a.cog) {
     const x = pad + a.cog.x * s, y = pad + a.cog.z * s;
     g.fillStyle = a.cogOk ? "#16a34a" : "#dc2626";
@@ -950,6 +999,7 @@ function clearAll() {
 }
 
 function loadScene() {
+  resetTilt();
   selType = null;
   picked = null;
   ghostPos = null;
@@ -1072,6 +1122,7 @@ $("contSel").addEventListener("change", (e) => {
 });
 $("modeSeg").addEventListener("click", (e) => {
   const m = e.target.closest("button")?.dataset.mode;
+  if (m === "quiz") { showQuiz(); return; }
   if (m && m !== mode) { mode = m; loadScene(); if (m === "task") showTaskIntro(); }
 });
 $("levelSeg").addEventListener("click", (e) => {
@@ -1100,6 +1151,7 @@ $("actionBar").addEventListener("click", (e) => {
 });
 $("statPanel").addEventListener("click", (e) => {
   if (e.target.id === "submitBtn") submitLevel();
+  if (e.target.id === "tiltBtn") tiltDemo();
 });
 $("statToggle").addEventListener("click", () => $("statPanel").classList.toggle("open"));
 $("helpBtn").addEventListener("click", showHelp);
@@ -1119,7 +1171,7 @@ window.addEventListener("keydown", (e) => {
 // ---------- 弹窗 ----------
 function openModal(html, acts) {
   $("dlg").innerHTML = html + `<div class="acts">${acts.map((a, i) => `<button class="btn ${a.primary ? "primary" : ""}" data-i="${i}">${a.label}</button>`).join("")}</div>`;
-  $("dlg").querySelectorAll(".acts button").forEach((b) => b.addEventListener("click", () => { closeModal(); acts[+b.dataset.i].fn?.(); }));
+  $("dlg").querySelectorAll(".acts button").forEach((b) => b.addEventListener("click", () => { const a = acts[+b.dataset.i]; if (!a.keep) closeModal(); a.fn?.(); }));
   $("modal").classList.add("show");
 }
 function closeModal() { $("modal").classList.remove("show"); }
@@ -1130,7 +1182,8 @@ const CARDS = `
   <div class="kcard"><b>② 怎么判断重货、轻泡货</b><p>货物密度（重量÷体积）大于箱子的“限重÷容积”，就是重货，否则是轻泡货。例如 20GP：21.7 t ÷ 33.1 m³ ≈ 0.66 t/m³。左边货物卡片已经标好了。</p></div>
   <div class="kcard"><b>③ 重不压轻、大不压小</b><p>重的放下层，轻的放上层，否则下面的货会被压坏；重货在下还能让车辆重心低、行驶更稳。</p></div>
   <div class="kcard"><b>④ 易碎品和“不可倒置”</b><p>易碎品放最上层，上面不再压货。标有 ↑↑ 的货物（冰箱、机油桶等）必须按箭头朝上立着放。</p></div>
-  <div class="kcard"><b>⑤ 重心居中</b><p>重货沿长度方向均匀铺开，左右对称。重心偏前或偏后会让某个车轴超载，偏向一侧容易侧翻。本模拟要求偏离中心不超过长、宽的 10%。</p></div>
+  <div class="kcard"><b>⑤ 重心居中</b><p>重货沿长度方向均匀铺开，左右对称。重心偏前或偏后会让某个车轴超载，偏向一侧或重心过高容易侧翻。本模拟要求偏离中心不超过长、宽的 10%。</p></div>
+  <div class="kcard"><b>⑦ 轴荷平衡</b><p>车辆和货物的重量由前后车轴分担，按杠杆原理分配：重心离哪个轴越近，哪个轴承重越多。总重不超限，某个轴也可能超载。后轴超载就把重货往前挪，反之往后挪。</p></div>
   <div class="kcard"><b>⑥ 先里后外、码放紧密</b><p>从里端往门口依次装，货物之间靠紧，减少空隙，防止运输途中移动、倒塌。</p></div>
 </div>`;
 const OPS = `
@@ -1150,7 +1203,7 @@ function showIntro() {
   openModal(
     `<span class="tag">互动仿真</span><h2>装车配载 3D 模拟</h2>
      <p>你是一名配载员，要把一批货物装进货车或集装箱。既要<b>装得多</b>（载重利用率、容积利用率高），又要<b>装得对</b>（重不压轻、易碎在上、不倒置、重心居中）。</p>
-     <p style="margin-top:6px">可以先在<b>自由练习</b>里随便试，熟悉操作；准备好了再进<b>任务闯关</b>，三关各 100 分，总成绩取三关平均。配载原则随时可以点右上角“知识点”查看。</p>
+     <p style="margin-top:6px">可以先在<b>自由练习</b>里随便试，熟悉操作；准备好了再进<b>任务闯关</b>，三关各 100 分；最后做<b>随堂小问</b>（3 题）。总成绩 = 三关平均分 × 70% + 小问 30 分，都可以重做，取最高分。配载原则随时可以点右上角“知识点”查看。</p>
      ${OPS}`,
     [
       { label: "自由练习", fn: () => { if (mode !== "free") { mode = "free"; loadScene(); } } },
@@ -1185,9 +1238,7 @@ function submitLevel() {
   const L = levels[levelIdx];
   L.best = Math.max(L.best ?? 0, s.total);
   const done = levels.filter((l) => l.best != null).length;
-  const overall = Math.round(levels.reduce((sum, l) => sum + (l.best ?? 0), 0) / TASKS.length);
-  post({ type: "tp:score", score: overall, max: 100, detail: { levels: levels.map((l, i) => ({ level: TASKS[i].title, best: l.best })) } });
-  if (done === TASKS.length) post({ type: "tp:complete" });
+  const overall = reportScore();
 
   const tips = [];
   if (s.left.length) tips.push(`还有货没装上：${s.left.join("、")}。`);
@@ -1207,12 +1258,160 @@ function submitLevel() {
        <tr><td>载重利用率 / 容积利用率</td><td>${pct(a.wr)} / ${pct(a.vr)}</td></tr>
      </table>
      <h4>点评</h4><ul>${tips.map((t) => `<li>${t}</li>`).join("")}</ul>
-     <p style="margin-top:10px;color:#64748b">总成绩（三关平均，未完成的关按 0 分）：<b style="color:#0f172a">${overall} 分</b>，已完成 ${done}/${TASKS.length} 关。</p>`,
+     <p style="margin-top:10px;color:#64748b">总成绩：<b style="color:#0f172a">${overall} 分</b>（三关平均 × 70% + 随堂小问 30 分，都取最高分），已完成 ${done}/${TASKS.length} 关${quizBest == null ? "，随堂小问还没做" : ""}。</p>`,
     [
       { label: "继续调整本关" },
       last ? { label: "完成", primary: true } : { label: "下一关", primary: true, fn: () => { levelIdx++; loadScene(); showTaskIntro(); } },
     ]
   );
+}
+
+// ---------- 成绩：三关平均 × 70% + 随堂小问 30 分 ----------
+let quizBest = null;
+function reportScore() {
+  const avg = levels.reduce((sum, l) => sum + (l.best ?? 0), 0) / TASKS.length;
+  const overall = Math.round(avg * 0.7 + (quizBest ?? 0));
+  post({ type: "tp:score", score: overall, max: 100, detail: { levels: levels.map((l, i) => ({ level: TASKS[i].title, best: l.best })), quiz: quizBest } });
+  if (levels.every((l) => l.best != null) && quizBest != null) post({ type: "tp:complete" });
+  return overall;
+}
+
+// ---------- 侧倾演示 ----------
+let tiltAnim = null;
+function tiltDemo() {
+  const a = lastA;
+  if (!a?.cog || tiltAnim) return;
+  const c = cont();
+  const side = a.dz >= 0 ? 1 : -1;
+  const ez = (side * c.W) / 2 + side * 0.05;
+  tilt.position.set(0, 0, ez);
+  root.position.z -= ez;
+  const peak = THREE.MathUtils.degToRad(2 + Math.min(1.6, a.risk) * 7);
+  tiltAnim = { t: 0, side, ez, peak };
+  toast(a.risk > 1 ? "急转弯时车身向重心一侧倾斜，风险很高，需要把货物左右均衡、重货放低" : a.risk > 0.6 ? "倾斜比较明显，建议调整重心" : "重心居中且较低，车身只轻微倾斜，比较稳");
+}
+function tiltUpdate(dt) {
+  if (!tiltAnim) return;
+  const T = 3.2;
+  tiltAnim.t += dt;
+  const u = Math.min(1, tiltAnim.t / T);
+  // 上升 — 小幅晃动 — 回正
+  const env = u < 0.35 ? Math.sin((u / 0.35) * Math.PI * 0.5) : u < 0.7 ? 1 + 0.08 * Math.sin((u - 0.35) * 40) * (0.7 - u) : Math.cos(((u - 0.7) / 0.3) * Math.PI * 0.5);
+  tilt.rotation.x = tiltAnim.side * tiltAnim.peak * env;
+  if (u >= 1) resetTilt();
+}
+function resetTilt() {
+  if (!tiltAnim) return;
+  root.position.z += tiltAnim.ez;
+  tilt.position.set(0, 0, 0);
+  tilt.rotation.x = 0;
+  tiltAnim = null;
+}
+
+// ---------- 随堂小问 ----------
+const QUIZ = [
+  {
+    id: "safe",
+    text: "① 一辆装 20GP 的半挂车，装了 8 托钢制零件（每托 1.8 t），两层叠放，全部集中在靠门端的一半（见下方俯视图），里端空着。总重 14.4 t，没有超过限重 21.7 t。这个装法安全吗？",
+    diagram: true,
+    options: ["安全：总重没有超限", "不安全：重心偏向门端，后轴组超载", "不安全：钢制零件叠放属于重压轻", "安全：只是容积利用率低一些"],
+    answer: 1,
+    pts: 10,
+    explain: "重心在门端附近，几乎全部重量压到后轴组，后轴组约 19.6 t，超过 18 t；前端反而很轻，转向和制动都会变差。总重不超限不等于安全，还要看轴荷和重心。",
+  },
+  {
+    id: "rate",
+    text: "② 20GP 限重 21.7 t、容积 33.1 m³。装了 8 托钢制零件（每托 1.8 t、0.72 m³）和 10 托泡沫制品（每托 0.12 t、1.44 m³）。载重利用率和容积利用率各约是多少？（填整数百分比）",
+    blanks: [
+      { label: "载重利用率", answer: 72 },
+      { label: "容积利用率", answer: 61 },
+    ],
+    pts: 10,
+    explain: "重量 8×1.8 + 10×0.12 = 15.6 t，15.6 ÷ 21.7 ≈ 72%；体积 8×0.72 + 10×1.44 = 20.16 m³，20.16 ÷ 33.1 ≈ 61%。重货和泡货搭配后，两个利用率都比只装一种高。",
+  },
+  {
+    id: "fix",
+    text: "③ 装车后发现：后轴组超载，前轴还有富余，总重没有超限。最合适的调整办法是？",
+    options: ["在门端再补装一些轻泡货", "把一部分重货从门端移到里端（靠前），让重心前移", "把重货叠高，少占地板", "把所有轻泡货卸下来"],
+    answer: 1,
+    pts: 10,
+    explain: "轴荷按杠杆原理分配：重心离哪个轴越近，那个轴分到的重量越多。把重货往前移，重心前移，后轴组减轻、前轴增加。叠高只会抬高重心，卸轻泡货几乎不改变轴荷。",
+  },
+];
+function drawQuizMini(cv) {
+  const L = 5.9, W = 2.35, s = 60, pad = 16;
+  cv.width = L * s + pad * 2;
+  cv.height = W * s + pad * 2 + 10;
+  const g = cv.getContext("2d");
+  g.fillStyle = "#e9d5b3";
+  g.fillRect(pad, pad, L * s, W * s);
+  for (const x of [3.5, 4.7])
+    for (const z of [0.1, 1.2]) {
+      g.fillStyle = "#64748b";
+      g.fillRect(pad + x * s, pad + z * s, 1.2 * s, 1.0 * s);
+      g.strokeStyle = "#1e293b";
+      g.lineWidth = 1.5;
+      g.strokeRect(pad + x * s, pad + z * s, 1.2 * s, 1.0 * s);
+      g.fillStyle = "#fff";
+      g.font = '12px "PingFang SC","Microsoft YaHei",sans-serif';
+      g.textAlign = "center";
+      g.fillText("钢×2层", pad + (x + 0.6) * s, pad + (z + 0.55) * s);
+    }
+  g.strokeStyle = "#334155";
+  g.lineWidth = 2;
+  g.strokeRect(pad, pad, L * s, W * s);
+  g.fillStyle = "#64748b";
+  g.font = '12px "PingFang SC","Microsoft YaHei",sans-serif';
+  g.textAlign = "left";
+  g.fillText("里端", pad, pad - 4);
+  g.textAlign = "right";
+  g.fillText("门端", pad + L * s, pad - 4);
+  g.fillStyle = "#475569";
+  for (const x of [0.9, 4.4]) {
+    const px = pad + x * s, py = pad + W * s + 3;
+    g.beginPath();
+    g.moveTo(px, py);
+    g.lineTo(px - 5, py + 9);
+    g.lineTo(px + 5, py + 9);
+    g.fill();
+  }
+}
+function showQuiz() {
+  const html = QUIZ.map((q) => {
+    let body = "";
+    if (q.options) body = q.options.map((o, i) => `<label><input type="radio" name="${q.id}" value="${i}"> ${"ABCD"[i]}. ${o}</label>`).join("");
+    else body = q.blanks.map((b, i) => `<label>${b.label} ≈ <input type="number" data-q="${q.id}" data-i="${i}" min="0" max="200"> %</label>`).join("");
+    return `<div class="q" data-id="${q.id}"><div class="qt">${q.text}</div>${q.diagram ? '<canvas id="qMini"></canvas>' : ""}${body}<div class="fb" style="display:none"></div></div>`;
+  }).join("");
+  openModal(
+    `<span class="tag">随堂小问 · 共 30 分</span><h2>判断与计算</h2><p style="color:#64748b">答完点“提交”，会显示每题解析。可以重做，取最高分。${quizBest != null ? `目前最好成绩：${quizBest} 分。` : ""}</p>${html}`,
+    [{ label: "关闭" }, { label: "提交", primary: true, keep: true, fn: gradeQuiz }]
+  );
+  drawQuizMini($("qMini"));
+}
+function gradeQuiz() {
+  let score = 0;
+  for (const q of QUIZ) {
+    const box = document.querySelector(`.q[data-id="${q.id}"]`);
+    let got = 0;
+    if (q.options) {
+      const v = box.querySelector("input:checked")?.value;
+      if (+v === q.answer && v != null) got = q.pts;
+    } else {
+      q.blanks.forEach((b, i) => {
+        const v = parseFloat(box.querySelector(`input[data-i="${i}"]`).value);
+        if (Math.abs(v - b.answer) <= 1) got += q.pts / q.blanks.length;
+      });
+    }
+    score += got;
+    const fb = box.querySelector(".fb");
+    fb.style.display = "";
+    fb.className = "fb " + (got === q.pts ? "good" : "wrong");
+    fb.innerHTML = `${got === q.pts ? "✓ 正确" : got ? `部分正确（${got} 分）` : "✗ 不对"}${q.options ? `，答案是 ${"ABCD"[q.answer]}` : "，答案：" + q.blanks.map((b) => `${b.label} ${b.answer}%`).join("、")}。${q.explain}`;
+  }
+  quizBest = Math.max(quizBest ?? 0, score);
+  const overall = reportScore();
+  toast(`本次小问 ${score} / 30 分，总成绩 ${overall} 分`);
 }
 
 // ---------- 循环 ----------
@@ -1317,6 +1516,7 @@ function loop() {
   timer.update();
   const dt = Math.min(0.05, timer.getDelta());
   ambientUpdate(timer.getElapsed(), dt);
+  tiltUpdate(dt);
   if (camAnim) {
     camAnim.t = Math.min(1, camAnim.t + 0.06);
     const e = 1 - Math.pow(1 - camAnim.t, 3);
