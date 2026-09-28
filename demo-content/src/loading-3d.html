@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>装车配载 3D 模拟</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body { font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; color: #0f172a; background: #e8eef6; font-size: 13px; }
+  button, select { font: inherit; }
+  #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+  .top { position: fixed; top: 8px; left: 8px; right: 8px; z-index: 5; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; pointer-events: none; }
+  .top > * { pointer-events: auto; }
+  .brand { font-weight: 700; font-size: 15px; background: rgba(255,255,255,.92); padding: 6px 12px; border-radius: 10px; box-shadow: 0 2px 8px rgba(15,23,42,.1); }
+  .seg { display: inline-flex; background: rgba(255,255,255,.92); border-radius: 10px; padding: 3px; box-shadow: 0 2px 8px rgba(15,23,42,.1); }
+  .seg button { border: 0; background: none; padding: 5px 10px; border-radius: 8px; cursor: pointer; color: #475569; white-space: nowrap; }
+  .seg button.on { background: #2f6fed; color: #fff; }
+  .seg button .sc { font-size: 11px; opacity: .85; margin-left: 3px; }
+  select { border: 0; background: rgba(255,255,255,.92); border-radius: 10px; padding: 6px 8px; box-shadow: 0 2px 8px rgba(15,23,42,.1); cursor: pointer; }
+  .spacer { flex: 1; }
+  .btn { border: 0; background: rgba(255,255,255,.92); border-radius: 10px; padding: 6px 12px; cursor: pointer; box-shadow: 0 2px 8px rgba(15,23,42,.1); color: #0f172a; white-space: nowrap; }
+  .btn:hover { background: #fff; }
+  .btn.primary { background: #2f6fed; color: #fff; }
+  .btn.primary:hover { background: #2458c5; }
+  .btn.danger { color: #b91c1c; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  .panel { position: fixed; z-index: 4; background: rgba(255,255,255,.94); backdrop-filter: blur(6px); border-radius: 14px; box-shadow: 0 6px 20px rgba(15,23,42,.12); overflow: auto; }
+  .panel h3 { font-size: 13px; color: #475569; font-weight: 600; margin: 2px 2px 8px; display: flex; justify-content: space-between; align-items: baseline; }
+  .panel h3 small { font-weight: 400; color: #94a3b8; font-size: 11px; }
+  #cargoPanel { top: 56px; left: 8px; bottom: 64px; width: 214px; padding: 10px; }
+  #statPanel { top: 56px; right: 8px; bottom: 64px; width: 262px; padding: 12px; }
+
+  .cargo { display: flex; gap: 8px; padding: 7px; border-radius: 10px; cursor: pointer; border: 2px solid transparent; margin-bottom: 4px; background: #f8fafc; }
+  .cargo:hover { background: #eef4ff; }
+  .cargo.on { border-color: #2f6fed; background: #eef4ff; }
+  .cargo.empty { opacity: .4; cursor: default; }
+  .sw { width: 30px; height: 30px; border-radius: 6px; flex: none; border: 1px solid rgba(0,0,0,.15); }
+  .cargo .nm { font-weight: 600; display: flex; justify-content: space-between; gap: 4px; }
+  .cargo .nm b { color: #2f6fed; font-weight: 700; }
+  .cargo .sub { color: #64748b; font-size: 11px; margin-top: 1px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+  .chip { font-size: 10.5px; padding: 0 6px; border-radius: 99px; background: #e2e8f0; color: #334155; line-height: 17px; }
+  .chip.heavy { background: #fde68a; color: #92400e; }
+  .chip.light { background: #dbeafe; color: #1e40af; }
+  .chip.up { background: #dcfce7; color: #166534; }
+  .chip.frag { background: #fee2e2; color: #b91c1c; }
+
+  .goal { background: #f1f5f9; border-radius: 10px; padding: 9px 10px; line-height: 1.6; color: #334155; margin-bottom: 10px; }
+  .goal b { color: #0f172a; }
+  .metric { margin-bottom: 9px; }
+  .metric .row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+  .metric .row span { color: #64748b; }
+  .bar { height: 10px; background: #e2e8f0; border-radius: 99px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; border-radius: 99px; background: #22c55e; transition: width .25s, background .25s; }
+  .insight { font-size: 12px; color: #475569; background: #fffbeb; border-radius: 8px; padding: 6px 8px; margin: 2px 0 10px; line-height: 1.5; }
+  #mini { width: 100%; display: block; border-radius: 8px; background: #f8fafc; }
+  .cog { font-size: 12px; color: #475569; margin: 4px 0 10px; line-height: 1.6; }
+  .ok { color: #16a34a; font-weight: 600; }
+  .bad { color: #dc2626; font-weight: 600; }
+  #viol { list-style: none; }
+  #viol li { background: #fef2f2; color: #991b1b; border-radius: 8px; padding: 5px 8px; margin-bottom: 4px; font-size: 12px; line-height: 1.5; }
+  #viol li.none { background: #f0fdf4; color: #166534; }
+  #submitBox { margin-top: 10px; }
+  #submitBox .btn { width: 100%; padding: 9px; }
+
+  #actionBar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 10px; z-index: 6; display: flex; gap: 6px; align-items: center; background: rgba(15,23,42,.86); color: #fff; padding: 6px 8px 6px 14px; border-radius: 14px; box-shadow: 0 6px 20px rgba(15,23,42,.2); max-width: calc(100% - 130px); flex-wrap: wrap; justify-content: center; }
+  #actionBar .msg { padding-right: 4px; line-height: 1.4; }
+  #actionBar .msg.warn { color: #fca5a5; }
+  #actionBar .btn { background: rgba(255,255,255,.14); color: #fff; box-shadow: none; padding: 5px 10px; }
+  #actionBar .btn:hover { background: rgba(255,255,255,.26); }
+  #actionBar .btn.primary { background: #2f6fed; }
+  #actionBar kbd { font-family: inherit; font-size: 11px; opacity: .7; margin-left: 2px; }
+
+  #toast { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 9; background: #0f172a; color: #fff; padding: 8px 14px; border-radius: 10px; opacity: 0; transition: opacity .25s; pointer-events: none; max-width: 80%; text-align: center; }
+  #toast.show { opacity: .92; }
+
+  #modal { position: fixed; inset: 0; z-index: 20; background: rgba(15,23,42,.45); display: none; align-items: center; justify-content: center; padding: 16px; }
+  #modal.show { display: flex; }
+  .dlg { background: #fff; border-radius: 16px; max-width: 620px; width: 100%; max-height: 100%; overflow: auto; padding: 22px 24px; box-shadow: 0 20px 50px rgba(15,23,42,.3); }
+  .dlg h2 { font-size: 20px; margin-bottom: 10px; }
+  .dlg h4 { font-size: 14px; margin: 14px 0 4px; }
+  .dlg p, .dlg li { line-height: 1.75; color: #334155; font-size: 14px; }
+  .dlg ul { padding-left: 20px; }
+  .dlg .acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
+  .dlg .acts .btn { box-shadow: none; background: #f1f5f9; padding: 8px 16px; }
+  .dlg .acts .btn.primary { background: #2f6fed; color: #fff; }
+  .kgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+  .kcard { background: #f8fafc; border-radius: 12px; padding: 10px 12px; }
+  .kcard > b { display: block; margin-bottom: 2px; }
+  .kcard p { font-size: 13px; line-height: 1.65; }
+  .score { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 10px; }
+  .score b { font-size: 44px; color: #2f6fed; line-height: 1; }
+  table.sc { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 14px; }
+  table.sc td { padding: 6px 4px; border-bottom: 1px solid #e2e8f0; }
+  table.sc td:last-child { text-align: right; font-weight: 600; white-space: nowrap; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; color: #2f6fed; background: #e0ecff; padding: 2px 10px; border-radius: 99px; margin-bottom: 8px; }
+
+  #statToggle { display: none; }
+
+  @media (max-width: 820px), (max-height: 520px) {
+    .brand { display: none; }
+    #cargoPanel { top: auto; left: 8px; right: 8px; bottom: 58px; width: auto; height: 112px; padding: 8px; display: flex; flex-direction: column; }
+    #cargoPanel h3 { display: none; }
+    #cargoList { display: flex; gap: 6px; overflow-x: auto; flex: 1; }
+    .cargo { flex: none; width: 170px; margin: 0; }
+    #statPanel { top: 96px; width: 250px; bottom: auto; max-height: calc(100% - 240px); display: none; }
+    #statPanel.open { display: block; }
+    #statToggle { display: inline-block; }
+    #actionBar { bottom: 6px; max-width: calc(100% - 90px); left: 8px; transform: none; font-size: 12px; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; }
+    #actionBar .msg.hint { display: none; }
+    #actionBar .msg { white-space: nowrap; }
+    #actionBar kbd { display: none; }
+    .kgrid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div class="top">
+  <div class="brand">装车配载 3D 模拟</div>
+  <div class="seg" id="modeSeg">
+    <button data-mode="free">自由练习</button>
+    <button data-mode="task">任务闯关</button>
+  </div>
+  <select id="contSel" title="选择车型 / 箱型"></select>
+  <div class="seg" id="levelSeg"></div>
+  <div class="spacer"></div>
+  <div class="seg" id="viewSeg">
+    <button data-view="iso">斜视</button>
+    <button data-view="top">俯视</button>
+    <button data-view="side">侧视</button>
+    <button data-view="door">门端</button>
+  </div>
+  <button class="btn" id="statToggle">数据</button>
+  <button class="btn" id="helpBtn">知识点</button>
+</div>
+
+<aside class="panel" id="cargoPanel">
+  <h3>待装货物 <small id="cargoHint">点一下选中</small></h3>
+  <div id="cargoList"></div>
+</aside>
+
+<aside class="panel" id="statPanel">
+  <div id="goalBox"></div>
+  <div class="metric">
+    <div class="row"><span>载重利用率</span><b id="wTxt"></b></div>
+    <div class="bar"><i id="wBar"></i></div>
+  </div>
+  <div class="metric">
+    <div class="row"><span>容积利用率</span><b id="vTxt"></b></div>
+    <div class="bar"><i id="vBar"></i></div>
+  </div>
+  <div class="insight" id="insight"></div>
+  <h3>重心位置 <small>俯视图，绿框为允许范围</small></h3>
+  <canvas id="mini"></canvas>
+  <div class="cog" id="cogTxt"></div>
+  <h3>装载检查</h3>
+  <ul id="viol"></ul>
+  <div id="submitBox"></div>
+</aside>
+
+<div id="actionBar"></div>
+<div id="toast"></div>
+<div id="modal"><div class="dlg" id="dlg"></div></div>
+
+<script>/*BUNDLE*/</script>
+</body>
+</html>
