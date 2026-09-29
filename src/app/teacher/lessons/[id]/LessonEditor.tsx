@@ -96,6 +96,11 @@ export function LessonEditor({
       <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
         <PublishPanel lesson={lesson} />
         <div className="card space-y-2 p-4 text-sm">
+          <div className="font-semibold">AI 助手</div>
+          <Link href={`/teacher/assistant?lesson=${lesson.id}`} className="btn-primary w-full">让 AI 改这个课时</Link>
+          <p className="text-xs text-slate-400">告诉它要怎么改：改写内容、加题、做互动动画等。每一步都能撤销。</p>
+        </div>
+        <div className="card space-y-2 p-4 text-sm">
           <div className="font-semibold">预览与导出</div>
           <Link href={`/teacher/lessons/${lesson.id}/preview`} className="btn-outline w-full" target="_blank">
             以学生视角预览

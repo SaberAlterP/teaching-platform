@@ -27,3 +27,5 @@ Thumbs.db
 # 本机推送脚本
 推送到GitHub.bat
 
+# 构建时生成的前端库（scripts/build-libs.mjs）
+/public/lib/

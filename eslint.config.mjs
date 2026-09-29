@@ -18,6 +18,7 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      "public/lib/**", // 构建生成的 three.js
     ],
   },
 ];
