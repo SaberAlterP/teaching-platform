@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { StatusBadge } from "@/components/StatusBadge";
-import { groupBySection } from "@/lib/sections";
+import { groupBySection, splitTitle } from "@/lib/sections";
 import { createLesson, deleteLesson, duplicateLesson, importLesson, moveLesson, reorderLessons } from "./actions";
 
 type L = { id: string; title: string; summary: string; section: string; status: string; openAt: string | null; moduleCount: number };
@@ -40,7 +40,7 @@ export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; o
     <section>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h2 className="text-lg font-bold">课时</h2>
-        <span className="hidden text-sm text-slate-400 sm:inline">拖动左侧把手可调整顺序</span>
+        <span className="hidden text-sm text-slate-400 sm:inline">拖动方块可调整顺序</span>
         <div className="ml-auto flex gap-2">
           <input ref={fileRef} type="file" accept=".json" hidden onChange={(e) => e.target.files?.[0] && onImport(e.target.files[0])} />
           <button className="btn-outline" onClick={() => fileRef.current?.click()}>导入课时</button>
@@ -76,54 +76,59 @@ export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; o
                   </button>
                 )}
                 {!isFolded && (
-        <ul className="space-y-2">
-          {g.items.map(({ item: l, index: i }) => (
-            <li
-              key={l.id}
-              draggable
-              onDragStart={() => setDrag(i)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => onDrop(i)}
-              className={`card flex flex-wrap items-center gap-3 p-4 transition ${drag === i ? "opacity-40" : ""}`}
-            >
-              <span className="cursor-grab select-none text-slate-300" title="拖动排序">⋮⋮</span>
-              <span className="w-8 text-center text-sm font-semibold text-slate-400">{i + 1}</span>
-              <div className="min-w-0 flex-1 basis-48">
-                <div className="flex items-center gap-2">
-                  <Link href={`/teacher/lessons/${l.id}`} className="truncate font-semibold hover:text-brand-600">
-                    {l.title}
-                  </Link>
-                  <StatusBadge status={l.status} openAt={l.openAt} />
-                </div>
-                <div className="mt-0.5 truncate text-sm text-slate-500">
-                  {l.moduleCount} 个模块{l.summary ? ` · ${l.summary}` : ""}
+        <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {g.items.map(({ item: l, index: i }) => {
+            const { no, name } = splitTitle(l.title);
+            return (
+              <div
+                key={l.id}
+                draggable
+                onDragStart={() => setDrag(i)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => onDrop(i)}
+                className={`card flex min-h-40 flex-col p-3.5 transition hover:border-brand-500 hover:shadow-md ${drag === i ? "opacity-40" : ""}`}
+              >
+                <Link href={`/teacher/lessons/${l.id}`} className="group block flex-1">
+                  <div className="flex items-start gap-2">
+                    <span className="text-xl font-extrabold leading-none text-brand-600">{no || `第${i + 1}课`}</span>
+                    <span className="ml-auto shrink-0"><StatusBadge status={l.status} openAt={l.openAt} /></span>
+                  </div>
+                  <div className="mt-2 line-clamp-3 text-[15px] leading-snug font-semibold group-hover:text-brand-600">{name}</div>
+                </Link>
+                <div className="mt-3 flex items-center gap-1 text-xs text-slate-500">
+                  <span title="拖动方块可调整顺序" className="cursor-grab text-slate-300 select-none">⋮⋮</span>
+                  <span>{l.moduleCount} 个模块</span>
+                  <Link href={`/teacher/lessons/${l.id}/preview`} className="btn-ghost ml-auto px-2 py-1 text-xs">预览</Link>
+                  <details className="relative">
+                    <summary className="btn-ghost cursor-pointer list-none px-2 py-1 text-xs select-none">更多 ▾</summary>
+                    <div className="absolute right-0 bottom-full z-10 mb-1 w-44 space-y-1 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
+                      <button className="btn-ghost w-full justify-start" onClick={() => start(() => duplicateLesson(l.id))}>复制课时</button>
+                      {otherCourses.length > 0 && (
+                        <select
+                          className="select py-1.5 text-sm text-slate-600"
+                          value=""
+                          onChange={(e) => {
+                            const c = otherCourses.find((x) => x.id === e.target.value);
+                            if (c && confirm(`把"${l.title}"移到课程"${c.title}"？学生作答会一起带过去。`)) start(() => moveLesson(l.id, c.id));
+                          }}
+                        >
+                          <option value="">移到其他课程…</option>
+                          {otherCourses.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+                        </select>
+                      )}
+                      <button
+                        className="btn-danger w-full justify-start"
+                        onClick={() => confirm(`删除"${l.title}"？其中的模块和学生作答都会被删除。`) && start(() => deleteLesson(l.id))}
+                      >
+                        删除课时
+                      </button>
+                    </div>
+                  </details>
                 </div>
               </div>
-              <Link href={`/teacher/lessons/${l.id}`} className="btn-outline">编辑</Link>
-              <Link href={`/teacher/lessons/${l.id}/preview`} className="btn-ghost">预览</Link>
-              <button className="btn-ghost" onClick={() => start(() => duplicateLesson(l.id))}>复制</button>
-              {otherCourses.length > 0 && (
-                <select
-                  className="select w-auto py-1.5 text-sm text-slate-600"
-                  value=""
-                  onChange={(e) => {
-                    const c = otherCourses.find((x) => x.id === e.target.value);
-                    if (c && confirm(`把"${l.title}"移到课程"${c.title}"？学生作答会一起带过去。`)) start(() => moveLesson(l.id, c.id));
-                  }}
-                >
-                  <option value="">移到…</option>
-                  {otherCourses.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
-                </select>
-              )}
-              <button
-                className="btn-danger"
-                onClick={() => confirm(`删除"${l.title}"？其中的模块和学生作答都会被删除。`) && start(() => deleteLesson(l.id))}
-              >
-                删除
-              </button>
-            </li>
-          ))}
-        </ul>
+            );
+          })}
+        </div>
                 )}
               </div>
             );

@@ -1,11 +1,13 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { deleteCourse, updateCourse } from "./actions";
 
 export function CourseHeader(p: {
   id: string; title: string; description: string; className: string; students: number; lessons: number; canDelete: boolean;
 }) {
   const [editing, setEditing] = useState(false);
+  const router = useRouter();
   if (editing)
     return (
       <form
@@ -31,7 +33,7 @@ export function CourseHeader(p: {
                 if (!confirm(`删除课程"${p.title}"？`)) return;
                 const r = await deleteCourse(p.id);
                 if (r.error) alert(r.error);
-                else setEditing(false);
+                else router.push("/teacher");
               }}
             >
               删除这门课
