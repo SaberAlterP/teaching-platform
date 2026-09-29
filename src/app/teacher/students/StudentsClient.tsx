@@ -2,10 +2,10 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import * as XLSX from "xlsx";
 import QRCode from "qrcode";
-import { deleteStudent, importStudents, resetStudentPassword, updateStudent, type StudentRow } from "../actions";
+import { deleteStudent, importStudents, resetClassPasswords, resetStudentPassword, updateStudent, type StudentRow } from "../actions";
 
-type S = { id: string; username: string; name: string; mustChangePassword: boolean; lastLoginAt: string | null; done: number };
-type Cred = { username: string; name: string; password: string };
+type S = { id: string; username: string; name: string; lastLoginAt: string | null; done: number };
+type Result = { message: string; skipped: { username: string; reason: string }[] };
 
 // 识别表头：学号/账号/username，姓名/name，密码/password（可选）
 function pickRows(rows: Record<string, unknown>[]): StudentRow[] {
@@ -38,8 +38,7 @@ export function StudentsClient({ className, students, totalModules }: { classNam
   const [mode, setMode] = useState<null | "file" | "paste">(null);
   const [preview, setPreview] = useState<StudentRow[]>([]);
   const [paste, setPaste] = useState("");
-  const [creds, setCreds] = useState<Cred[] | null>(null);
-  const [skipped, setSkipped] = useState<{ username: string; reason: string }[]>([]);
+  const [result, setResult] = useState<Result | null>(null);
   const [pending, start] = useTransition();
   const [q, setQ] = useState("");
   const [qr, setQr] = useState("");
@@ -64,19 +63,11 @@ export function StudentsClient({ className, students, totalModules }: { classNam
   function doImport(rows: StudentRow[]) {
     start(async () => {
       const r = await importStudents(rows);
-      setCreds(r.created);
-      setSkipped(r.skipped);
+      setResult({ message: `成功创建 ${r.created.length} 个账号，初始密码就是各自的学号。`, skipped: r.skipped });
       setPreview([]);
       setPaste("");
       setMode(null);
     });
-  }
-
-  function downloadCreds(list: Cred[]) {
-    const ws = XLSX.utils.json_to_sheet(list.map((c) => ({ 学号: c.username, 姓名: c.name, 初始密码: c.password })));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "账号");
-    XLSX.writeFile(wb, `学生账号_${new Date().toLocaleDateString("zh-CN").replace(/\//g, "-")}.xlsx`);
   }
 
   function downloadTemplate() {
@@ -99,6 +90,19 @@ export function StudentsClient({ className, students, totalModules }: { classNam
         <div className="flex flex-wrap gap-2">
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" hidden onChange={(e) => { if (e.target.files?.[0]) onFile(e.target.files[0]); e.target.value = ""; }} />
           <button className="btn-ghost" onClick={downloadTemplate}>下载名单模板</button>
+          <button
+            className="btn-outline"
+            disabled={pending || students.length === 0}
+            onClick={() =>
+              confirm(`把本班 ${students.length} 名学生的密码全部重置为各自的学号？\n学生自己改过的密码也会被覆盖。`) &&
+              start(async () => {
+                const n = await resetClassPasswords();
+                setResult({ message: `已将 ${n} 名学生的密码重置为学号。`, skipped: [] });
+              })
+            }
+          >
+            全班密码重置为学号
+          </button>
           <button className="btn-outline" onClick={() => setMode(mode === "paste" ? null : "paste")}>粘贴名单</button>
           <button className="btn-primary" onClick={() => fileRef.current?.click()}>导入 Excel 名单</button>
         </div>
@@ -108,9 +112,9 @@ export function StudentsClient({ className, students, totalModules }: { classNam
         <div className="card p-4 text-sm text-slate-600">
           <div className="mb-1 font-semibold text-slate-800">学生怎么登录</div>
           <ol className="list-decimal space-y-1 pl-5">
-            <li>导入名单后，系统为每个学生生成账号（学号）和随机初始密码，<b>请下载账号表发给学生</b>。</li>
+            <li>导入名单后，系统为每个学生生成账号：<b>账号和初始密码都是学号</b>，不需要再发密码。</li>
             <li>学生扫右侧二维码或打开 <code className="rounded bg-slate-100 px-1">{origin}</code> 登录。</li>
-            <li>首次登录会要求修改密码。忘记密码时，在下表点“重置密码”。</li>
+            <li>学生登录后可以在右上角“改密码”自行修改；忘记密码时，在下表点“重置密码”即可恢复成学号。</li>
           </ol>
         </div>
         {qr && (
@@ -154,18 +158,16 @@ export function StudentsClient({ className, students, totalModules }: { classNam
         </div>
       )}
 
-      {creds && (
-        <div className="card space-y-3 border-emerald-200 bg-emerald-50/40 p-4">
+      {result && (
+        <div className="card space-y-2 border-emerald-200 bg-emerald-50/40 p-4">
           <div className="flex items-center gap-3">
-            <div className="font-semibold text-emerald-800">成功创建 {creds.length} 个账号</div>
-            {creds.length > 0 && <button className="btn-primary ml-auto" onClick={() => downloadCreds(creds)}>下载账号密码表</button>}
-            <button className="btn-ghost" onClick={() => setCreds(null)}>关闭</button>
+            <div className="font-semibold text-emerald-800">{result.message}</div>
+            <button className="btn-ghost ml-auto" onClick={() => setResult(null)}>关闭</button>
           </div>
-          {creds.length > 0 && <p className="text-sm text-amber-700">初始密码只显示这一次，关闭前请先下载。</p>}
-          {skipped.length > 0 && (
+          {result.skipped.length > 0 && (
             <div className="text-sm text-slate-600">
-              跳过 {skipped.length} 人：{skipped.slice(0, 10).map((s) => `${s.username}（${s.reason}）`).join("、")}
-              {skipped.length > 10 && " …"}
+              跳过 {result.skipped.length} 人：{result.skipped.slice(0, 10).map((s) => `${s.username}（${s.reason}）`).join("、")}
+              {result.skipped.length > 10 && " …"}
             </div>
           )}
         </div>
@@ -187,7 +189,7 @@ export function StudentsClient({ className, students, totalModules }: { classNam
           </thead>
           <tbody className="divide-y divide-slate-100">
             {list.map((s) => (
-              <StudentRowView key={s.id} s={s} total={totalModules} onReset={(pw) => setCreds([{ username: s.username, name: s.name, password: pw }])} />
+              <StudentRowView key={s.id} s={s} total={totalModules} onReset={() => setResult({ message: `已将 ${s.name} 的密码重置为学号 ${s.username}。`, skipped: [] })} />
             ))}
             {list.length === 0 && (
               <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-400">{students.length ? "没有匹配的学生" : "还没有学生，先导入名单吧"}</td></tr>
@@ -199,7 +201,7 @@ export function StudentsClient({ className, students, totalModules }: { classNam
   );
 }
 
-function StudentRowView({ s, total, onReset }: { s: S; total: number; onReset: (pw: string) => void }) {
+function StudentRowView({ s, total, onReset }: { s: S; total: number; onReset: () => void }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(s.name);
   const [pending, start] = useTransition();
@@ -233,7 +235,7 @@ function StudentRowView({ s, total, onReset }: { s: S; total: number; onReset: (
         <button
           className="btn-ghost px-2 py-1"
           disabled={pending}
-          onClick={() => confirm(`重置 ${s.name} 的密码？`) && start(async () => onReset(await resetStudentPassword(s.id)))}
+          onClick={() => confirm(`把 ${s.name} 的密码重置为学号 ${s.username}？`) && start(async () => { await resetStudentPassword(s.id); onReset(); })}
         >
           重置密码
         </button>

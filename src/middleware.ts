@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/session";
 
-// 路由级权限：未登录跳登录页；老师/学生只能进各自区域；首次登录强制改密码
+// 路由级权限：未登录跳登录页；老师/学生只能进各自区域；默认密码的教师账号首次登录强制改密码
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const s = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);

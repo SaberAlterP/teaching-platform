@@ -12,7 +12,6 @@ export default async function StudentsPage() {
       id: schema.users.id,
       username: schema.users.username,
       name: schema.users.name,
-      mustChangePassword: schema.users.mustChangePassword,
       lastLoginAt: schema.users.lastLoginAt,
     })
     .from(schema.users)
