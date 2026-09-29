@@ -88,7 +88,7 @@ export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; o
                 onDrop={() => onDrop(i)}
                 className={`card flex min-h-40 flex-col p-3.5 transition hover:border-brand-500 hover:shadow-md ${drag === i ? "opacity-40" : ""}`}
               >
-                <Link href={`/teacher/lessons/${l.id}`} className="group block flex-1">
+                <Link href={`/teacher/lessons/${l.id}`} prefetch={false} className="group block flex-1">
                   <div className="flex items-start gap-2">
                     <span className="text-xl font-extrabold leading-none text-brand-600">{no || `第${i + 1}课`}</span>
                     <span className="ml-auto shrink-0"><StatusBadge status={l.status} openAt={l.openAt} /></span>
@@ -98,7 +98,7 @@ export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; o
                 <div className="mt-3 flex items-center gap-1 text-xs text-slate-500">
                   <span title="拖动方块可调整顺序" className="cursor-grab text-slate-300 select-none">⋮⋮</span>
                   <span>{l.moduleCount} 个模块</span>
-                  <Link href={`/teacher/lessons/${l.id}/preview`} className="btn-ghost ml-auto px-2 py-1 text-xs">预览</Link>
+                  <Link href={`/teacher/lessons/${l.id}/preview`} prefetch={false} className="btn-ghost ml-auto px-2 py-1 text-xs">预览</Link>
                   <details className="relative">
                     <summary className="btn-ghost cursor-pointer list-none px-2 py-1 text-xs select-none">更多 ▾</summary>
                     <div className="absolute right-0 bottom-full z-10 mb-1 w-44 space-y-1 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">

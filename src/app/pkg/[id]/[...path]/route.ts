@@ -6,7 +6,7 @@ import { assetDir, guessMime, safeJoin } from "@/lib/storage";
 // 这些页面运行在 sandbox（无 allow-same-origin）的 iframe 里，属于"不透明来源"，
 // 读不到平台的 Cookie，也调不了平台接口，所以一个游戏里的代码无法冒充学生或老师。
 // 也因为不透明来源不会带 Cookie，这里不做登录校验；包 ID 是随机的，无法猜到。
-export async function GET(_: Request, { params }: { params: Promise<{ id: string; path: string[] }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string; path: string[] }> }) {
   const { id, path: parts } = await params;
   let file: string;
   try {
@@ -17,13 +17,21 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const stat = await fs.promises.stat(file).catch(() => null);
   if (!stat || !stat.isFile()) return new Response("Not found", { status: 404 });
 
+  // 包 ID 每次上传都是新的，文件内容不会变：让浏览器长期缓存，再次打开同一课时不用重新下载（大的 3D 包有几百 KB）
+  const etag = `"${stat.size.toString(36)}-${Math.floor(stat.mtimeMs).toString(36)}"`;
+  const common = {
+    ETag: etag,
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "Access-Control-Allow-Origin": "*", // 不透明来源加载 ES module / fetch 需要
+  };
+  if (req.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers: common });
+
   const stream = Readable.toWeb(fs.createReadStream(file)) as ReadableStream;
   return new Response(stream, {
     headers: {
+      ...common,
       "Content-Type": guessMime(file),
       "Content-Length": String(stat.size),
-      "Cache-Control": "public, max-age=3600",
-      "Access-Control-Allow-Origin": "*", // 不透明来源加载 ES module / fetch 需要
       // 即使有人直接打开这个地址，页面也被强制隔离
       "Content-Security-Policy": "sandbox allow-scripts allow-pointer-lock allow-popups allow-forms allow-modals allow-downloads",
       "X-Content-Type-Options": "nosniff",

@@ -1,4 +1,4 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireTeacher } from "@/lib/auth";
 import { getTeacherCourse } from "@/lib/course";
@@ -20,7 +20,21 @@ export default async function StatsPage() {
 
   const lessons = await db.select().from(schema.lessons).where(eq(schema.lessons.courseId, course.id)).orderBy(asc(schema.lessons.order));
   const lids = lessons.map((l) => l.id);
-  const mods = lids.length ? await db.select().from(schema.modules).where(inArray(schema.modules.lessonId, lids)).orderBy(asc(schema.modules.order)) : [];
+  // 图文正文很大，统计用不到：只有习题和互动内容才读 data
+  const mods = lids.length
+    ? await db
+        .select({
+          id: schema.modules.id,
+          lessonId: schema.modules.lessonId,
+          order: schema.modules.order,
+          type: schema.modules.type,
+          title: schema.modules.title,
+          data: sql<Record<string, unknown>>`case when ${schema.modules.type} in ('QUIZ', 'HTML') then ${schema.modules.data} else '{}'::jsonb end`,
+        })
+        .from(schema.modules)
+        .where(inArray(schema.modules.lessonId, lids))
+        .orderBy(asc(schema.modules.order))
+    : [];
   const mids = mods.map((m) => m.id);
   const subs = mids.length && sids.length
     ? await db.select().from(schema.submissions).where(inArray(schema.submissions.moduleId, mids))

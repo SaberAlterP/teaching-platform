@@ -4,6 +4,7 @@ import { requireTeacher } from "@/lib/auth";
 import { getTeacherCourse } from "@/lib/course";
 import { CourseCard } from "@/components/CourseCard";
 import { openCourse } from "./actions";
+import { PendingButton } from "@/components/PendingButton";
 import { NewCourseTile } from "./NewCourseTile";
 
 // 教师首页：我教的课程，每门课一个方块，点进去是这门课的课时
@@ -45,7 +46,7 @@ export default async function TeacherHome() {
           const empty = s.lessons === 0;
           return (
             <form key={c.id} action={openCourse.bind(null, c.id)} className="group">
-              <button className="block h-full w-full text-left">
+              <PendingButton className="block h-full w-full text-left">
                 <CourseCard title={c.title} description={c.description} index={i} muted={empty}>
                   {empty ? (
                     <div className="text-sm text-slate-400">还没有课时 · 点击进入开始建设</div>
@@ -58,7 +59,7 @@ export default async function TeacherHome() {
                   )}
                   <div className="mt-2 text-xs text-slate-400">学生 {s.students} 人</div>
                 </CourseCard>
-              </button>
+              </PendingButton>
             </form>
           );
         })}
