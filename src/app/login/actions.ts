@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import {
-  checkPassword, clearLoginFailures, endSession, loginBlocked, recordLoginFailure, startSession,
+  checkPassword, clearLoginFailures, endSession, loginBlocked, mustChangeNow, recordLoginFailure, startSession,
 } from "@/lib/auth";
 
 export async function loginAction(_: { error: string }, fd: FormData) {
@@ -27,7 +27,7 @@ export async function loginAction(_: { error: string }, fd: FormData) {
   clearLoginFailures(key);
   await db.update(schema.users).set({ lastLoginAt: new Date() }).where(eq(schema.users.id, user.id));
   await startSession(user);
-  redirect(user.mustChangePassword ? "/account/password" : user.role === "TEACHER" ? "/teacher" : "/learn");
+  redirect(mustChangeNow(user) ? "/account/password" : user.role === "TEACHER" ? "/teacher" : "/learn");
 }
 
 export async function logoutAction() {
