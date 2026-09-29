@@ -1,5 +1,4 @@
 "use server";
-import { randomInt } from "crypto";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -259,16 +258,11 @@ export async function reorderModules(lessonId: string, ids: string[]) {
 // ---------------- 学生 ----------------
 export type StudentRow = { username: string; name: string; password?: string };
 
-function randomPassword() {
-  const chars = "abcdefghjkmnpqrstuvwxyz23456789";
-  return Array.from({ length: 8 }, () => chars[randomInt(chars.length)]).join("");
-}
-
-// 批量导入。返回每个新账号的初始密码，老师下载后分发给学生。
+// 批量导入。学生的初始密码就是学号（也可以在名单里另填一列密码），不需要再分发密码。
 export async function importStudents(rows: StudentRow[]) {
   const t = await requireTeacher();
   const { cls } = await getTeacherCourse(t.id);
-  const created: { username: string; name: string; password: string }[] = [];
+  const created: { username: string; name: string }[] = [];
   const skipped: { username: string; reason: string }[] = [];
   const seen = new Set<string>();
   for (const r of rows) {
@@ -285,27 +279,46 @@ export async function importStudents(rows: StudentRow[]) {
       skipped.push({ username, reason: "账号已存在（已加入本课程）" });
       continue;
     }
-    const password = String(r.password ?? "").trim() || randomPassword();
+    const password = String(r.password ?? "").trim() || username;
     const [u] = await db
       .insert(schema.users)
-      .values({ username, name, role: "STUDENT", passwordHash: await hashPassword(password) })
+      .values({ username, name, role: "STUDENT", passwordHash: await hashPassword(password), mustChangePassword: false })
       .returning();
     await db.insert(schema.enrollments).values({ userId: u.id, classId: cls.id });
-    created.push({ username, name, password });
+    created.push({ username, name });
   }
   revalidatePath("/teacher/students");
   return { created, skipped };
 }
 
+// 把某个学生的密码重置为学号
 export async function resetStudentPassword(userId: string) {
   const t = await requireTeacher();
   await assertStudentInMyClass(userId, t.id);
-  const password = randomPassword();
+  const u = await db.query.users.findFirst({ where: eq(schema.users.id, userId) });
+  if (!u) throw new Error("学生不存在");
   await db
     .update(schema.users)
-    .set({ passwordHash: await hashPassword(password), mustChangePassword: true })
+    .set({ passwordHash: await hashPassword(u.username), mustChangePassword: false })
     .where(eq(schema.users.id, userId));
-  return password;
+}
+
+// 把本班所有学生的密码重置为各自的学号（学生自己改过的密码也会被覆盖）
+export async function resetClassPasswords() {
+  const t = await requireTeacher();
+  const { cls } = await getTeacherCourse(t.id);
+  const students = await db
+    .select({ id: schema.users.id, username: schema.users.username })
+    .from(schema.users)
+    .innerJoin(schema.enrollments, eq(schema.enrollments.userId, schema.users.id))
+    .where(and(eq(schema.enrollments.classId, cls.id), eq(schema.users.role, "STUDENT")));
+  for (const s of students) {
+    await db
+      .update(schema.users)
+      .set({ passwordHash: await hashPassword(s.username), mustChangePassword: false })
+      .where(eq(schema.users.id, s.id));
+  }
+  return students.length;
 }
 
 export async function updateStudent(userId: string, name: string) {
