@@ -59,3 +59,8 @@ body {
 .rte-content .selectedCell::after { content: ""; position: absolute; inset: 0; background: rgba(47, 111, 237, .12); pointer-events: none; }
 .prose-tp hr { border: 0; border-top: 2px solid #e2e8f0; margin: 1.2em 0; }
 .rte-content hr.ProseMirror-selectednode { border-top-color: #2f6fed; }
+
+@keyframes loadbar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}

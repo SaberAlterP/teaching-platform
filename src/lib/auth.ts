@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
@@ -11,11 +12,14 @@ export async function getSession(): Promise<SessionPayload | null> {
   return verifySession(c.get(SESSION_COOKIE)?.value);
 }
 
+// 同一次页面渲染里 layout 和 page 都要查用户，用 cache 合并成一次数据库查询
+const findUser = cache((uid: string) => db.query.users.findFirst({ where: eq(schema.users.id, uid) }));
+
 export async function requireUser() {
   const s = await getSession();
   if (!s) redirect("/login");
   // 令牌有效但用户可能已被删除
-  const user = await db.query.users.findFirst({ where: eq(schema.users.id, s.uid) });
+  const user = await findUser(s.uid);
   if (!user) redirect("/login");
   return user;
 }
