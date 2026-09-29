@@ -8,3 +8,9 @@ export function groupBySection<T extends { section: string }>(items: T[]) {
   });
   return groups;
 }
+
+// 标题以“5-3 ”开头时，把编号拆出来放在方块左上角
+export function splitTitle(title: string) {
+  const m = title.match(/^(\d+(?:[-.]\d+)+)\s+(.*)$/);
+  return m ? { no: m[1], name: m[2] } : { no: "", name: title };
+}

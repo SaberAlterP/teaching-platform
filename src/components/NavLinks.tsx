@@ -7,8 +7,10 @@ export function NavLinks({ links }: { links: { href: string; label: string; badg
   return (
     <nav className="flex min-w-0 items-center gap-0.5 overflow-x-auto text-sm sm:gap-1">
       {links.map((l) => {
-        const active = l.href === path || (l.href !== "/teacher" && l.href !== "/learn" && path.startsWith(l.href))
-          || (l.href === "/teacher" && path.startsWith("/teacher/lessons"));
+        const active =
+          l.href === "/teacher" ? path === "/teacher" || path.startsWith("/teacher/course") || path.startsWith("/teacher/lessons")
+          : l.href === "/learn" ? path === "/learn" || (path.startsWith("/learn/") && !path.startsWith("/learn/grades"))
+          : path.startsWith(l.href);
         return (
           <Link
             key={l.href}
