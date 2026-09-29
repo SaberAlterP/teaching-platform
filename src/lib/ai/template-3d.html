@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>示例：3D 月台装车</title>
+<style>
+:root{--ink:#1f2a3a;--line:#243447;--brand:#2f6fed;--ok:#1f9d55;--bad:#d64545}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:var(--ink);background:#dfe9f3}
+#scene{position:fixed;inset:0}
+.panel{position:fixed;background:rgba(255,255,255,.95);border:2px solid var(--line);border-radius:12px;box-shadow:0 4px 0 rgba(36,52,71,.18)}
+#top{left:12px;top:12px;right:12px;display:flex;gap:8px;align-items:center;padding:8px 12px}
+#top h1{font-size:16px;margin:0}
+#score{margin-left:auto;font-weight:700}
+#caption{left:50%;bottom:64px;transform:translateX(-50%);width:min(92%,720px);padding:10px 16px;font-size:15px;line-height:1.7}
+#ctrl{left:50%;bottom:12px;transform:translateX(-50%);display:flex;gap:8px;padding:6px 10px}
+button{font:inherit;cursor:pointer;border:2px solid var(--line);background:#fff;border-radius:10px;padding:5px 12px}
+button.primary{background:var(--brand);border-color:#1a48a8;color:#fff}
+#quiz{right:12px;top:70px;width:min(340px,calc(100% - 24px));padding:12px;max-height:calc(100% - 160px);overflow:auto}
+#quiz .opt{display:block;width:100%;text-align:left;margin:5px 0}
+.right{background:#e3f6ea!important;border-color:var(--ok)!important}.wrong{background:#fde8e8!important;border-color:var(--bad)!important}
+.label{background:#fff;border:2px solid var(--line);border-radius:8px;padding:2px 8px;font-size:13px;white-space:nowrap}
+</style>
+<!-- 平台内置 three.js：不要用 CDN（学生网络可能打不开） -->
+<script type="importmap">{"imports":{"three":"/lib/three/three.module.js","three/addons":"/lib/three/addons.js"}}</script>
+</head>
+<body>
+<div id="scene"></div>
+<div id="top" class="panel"><h1>3D 月台装车</h1><span id="score">得分 0 / 100</span></div>
+<div id="caption" class="panel"></div>
+<div id="ctrl" class="panel"><button id="prev">上一步</button><button id="play" class="primary">暂停</button><button id="next">下一步</button><button id="toggleQuiz">小题</button></div>
+<div id="quiz" class="panel" hidden></div>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls, RoundedBoxGeometry, CSS2DRenderer, CSS2DObject } from "three/addons";
+
+const TP = {
+  report(s) { try { parent.postMessage({ type: "tp:score", score: Math.round(s), max: 100 }, "*"); } catch (e) {} },
+  complete() { try { parent.postMessage({ type: "tp:complete" }, "*"); } catch (e) {} },
+};
+
+// ---------- 渲染器、相机、灯光 ----------
+const host = document.getElementById("scene");
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+let pixelRatio = Math.min(1.5, window.devicePixelRatio || 1);
+renderer.setPixelRatio(pixelRatio);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+host.appendChild(renderer.domElement);
+const labels = new CSS2DRenderer();
+labels.domElement.style.cssText = "position:absolute;inset:0;pointer-events:none";
+host.appendChild(labels.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color("#cfe3f5");
+scene.fog = new THREE.Fog("#cfe3f5", 60, 140);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 400);
+camera.position.set(18, 14, 22);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, 2, 0);
+controls.maxPolarAngle = Math.PI * 0.48;
+
+scene.add(new THREE.HemisphereLight("#ffffff", "#8aa0b7", 1.6));
+const sun = new THREE.DirectionalLight("#fff4e0", 2.2);
+sun.position.set(20, 30, 12);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30 });
+scene.add(sun);
+
+function resize() {
+  const w = host.clientWidth, h = host.clientHeight;
+  renderer.setSize(w, h); labels.setSize(w, h);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(host);
+
+// ---------- 画风：描边 + 分层材质 ----------
+const LINE = new THREE.LineBasicMaterial({ color: "#243447" });
+const matCache = {};
+const mat = (c) => (matCache[c] ??= new THREE.MeshStandardMaterial({ color: c, roughness: 0.75, metalness: 0.05 }));
+// 生成带描边的网格；细节件（窗、灯、条纹）用不同颜色的小件叠加，形成材质层次
+function part(geo, color, x, y, z, parent = scene) {
+  const m = new THREE.Mesh(geo, mat(color));
+  m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true;
+  m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 25), LINE));
+  parent.add(m);
+  return m;
+}
+function label(text, obj, y) {
+  const div = document.createElement("div"); div.className = "label"; div.textContent = text;
+  const l = new CSS2DObject(div); l.position.set(0, y, 0); obj.add(l); return l;
+}
+
+// 地面和月台
+part(new THREE.BoxGeometry(80, 0.4, 60), "#9fb3c8", 0, -0.2, 0).castShadow = false;
+part(new THREE.BoxGeometry(30, 1.4, 8), "#c9d3de", 0, 0.7, -10);
+for (let i = -12; i <= 12; i += 6) part(new THREE.BoxGeometry(2.4, 0.2, 0.3), "#f2c14e", i, 1.45, -6.1); // 月台边黄线
+
+// 货车：车厢 + 车头 + 车窗 + 车轮
+const truck = new THREE.Group(); scene.add(truck);
+part(new RoundedBoxGeometry(10, 3.4, 3.6, 2, 0.12), "#f4f7fb", 0, 2.6, 0, truck);
+part(new RoundedBoxGeometry(3, 2.8, 3.4, 2, 0.2), "#2f6fed", 6.8, 2.3, 0, truck);
+part(new THREE.BoxGeometry(0.1, 1.1, 2.6), "#cfe3ff", 8.32, 2.9, 0, truck);
+const wheelGeo = new THREE.CylinderGeometry(0.75, 0.75, 0.5, 20).rotateX(Math.PI / 2);
+for (const x of [-3.2, 2.6, 6.8]) for (const z of [-1.7, 1.7]) part(wheelGeo, "#38414f", x, 0.75, z, truck);
+label("货车", truck, 5);
+
+// 货箱
+const cargo = [];
+for (let i = 0; i < 6; i++) {
+  const c = part(new RoundedBoxGeometry(1.6, 1.4, 1.6, 2, 0.06), i % 2 ? "#e8a94f" : "#d9913a", -12 + i * 2, 2.1, -10);
+  cargo.push({ mesh: c, from: c.position.clone(), to: new THREE.Vector3(-3.6 + (i % 3) * 1.8, 1.6 + Math.floor(i / 3) * 1.5, (i % 2 ? 0.8 : -0.8)) });
+}
+
+// 氛围动效：飘动的云（低帧率时隐藏）
+const clouds = new THREE.Group(); scene.add(clouds);
+for (let i = 0; i < 6; i++) {
+  const c = part(new THREE.SphereGeometry(2 + (i % 3), 12, 8), "#ffffff", -40 + i * 16, 22 + (i % 2) * 3, -30 + (i % 3) * 8, clouds);
+  c.castShadow = false;
+}
+
+// ---------- 分步讲解 ----------
+const STEPS = [
+  { title: "车辆进场", text: "货车倒入月台，停稳后垫好轮挡。", dur: 5 },
+  { title: "装货", text: "叉车把货箱装入车厢：<b>重货在下、居中</b>。", dur: 7 },
+  { title: "加固封车", text: "装完后加固并施封，记录封号。", dur: 5 },
+];
+let step = 0, t = 0, playing = true;
+const cap = document.getElementById("caption");
+function setStep(i) {
+  step = Math.max(0, Math.min(STEPS.length - 1, i)); t = 0;
+  cap.innerHTML = `<b>第 ${step + 1}/${STEPS.length} 步 · ${STEPS[step].title}</b>　${STEPS[step].text}`;
+}
+document.getElementById("prev").onclick = () => setStep(step - 1);
+document.getElementById("next").onclick = () => setStep(step + 1);
+const playBtn = document.getElementById("play");
+playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? "暂停" : "播放"; };
+setStep(0);
+
+// ---------- 小题 ----------
+const QUESTIONS = [
+  { q: "货车停靠月台后第一步做什么？", options: ["立即装货", "垫好轮挡", "施封"], answer: 1 },
+  { q: "（拓展）重货应该装在哪里？", options: ["顶层", "底层居中", "尾门处"], answer: 1 },
+];
+const answered = {};
+const quizEl = document.getElementById("quiz");
+document.getElementById("toggleQuiz").onclick = () => (quizEl.hidden = !quizEl.hidden);
+function renderQuiz() {
+  quizEl.innerHTML = "<b>小题（平台保留最高分）</b>";
+  QUESTIONS.forEach((item, qi) => {
+    const d = document.createElement("div");
+    d.innerHTML = `<p>${qi + 1}. ${item.q}</p>`;
+    item.options.forEach((o, oi) => {
+      const b = document.createElement("button");
+      b.className = "opt"; b.textContent = o;
+      if (answered[qi] !== undefined) { b.disabled = true; if (oi === item.answer) b.classList.add("right"); else if (oi === answered[qi]) b.classList.add("wrong"); }
+      b.onclick = () => { answered[qi] = oi; renderQuiz(); score(); };
+      d.appendChild(b);
+    });
+    quizEl.appendChild(d);
+  });
+}
+function score() {
+  const s = (QUESTIONS.filter((q, i) => answered[i] === q.answer).length / QUESTIONS.length) * 100;
+  document.getElementById("score").textContent = `得分 ${Math.round(s)} / 100`;
+  if (Object.keys(answered).length === QUESTIONS.length) { TP.report(s); TP.complete(); }
+}
+renderQuiz();
+
+// ---------- 动画循环（帧率低时自动降级：关阴影、降分辨率、停云） ----------
+const clock = new THREE.Clock();
+let slow = 0, lite = false;
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(0.1, clock.getDelta());
+  if (dt > 0.045 && !lite && ++slow > 60) {
+    lite = true; renderer.shadowMap.enabled = false; renderer.setPixelRatio(1); clouds.visible = false;
+  }
+  if (playing) { t += dt; if (t > STEPS[step].dur && step < STEPS.length - 1) setStep(step + 1); }
+  const p = Math.min(1, t / 3);
+  truck.position.x = step === 0 ? THREE.MathUtils.lerp(-30, 0, p) : 0;
+  cargo.forEach((c, i) => {
+    const k = step === 0 ? 0 : step === 1 ? THREE.MathUtils.clamp(t / 1 - i, 0, 1) : 1;
+    c.mesh.position.lerpVectors(c.from, c.to.clone().add(truck.position), k);
+    c.mesh.position.y += Math.sin(k * Math.PI) * 2; // 抬起再放下
+  });
+  clouds.children.forEach((c, i) => { c.position.x += dt * (0.6 + i * 0.1); if (c.position.x > 60) c.position.x = -60; });
+  controls.update();
+  renderer.render(scene, camera);
+  labels.render(scene, camera);
+});
+</script>
+</body>
+</html>

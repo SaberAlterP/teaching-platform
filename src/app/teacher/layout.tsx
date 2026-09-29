@@ -25,6 +25,7 @@ export default async function TeacherLayout({ children }: { children: React.Reac
           { href: "/teacher/students", label: "学生" },
           { href: "/teacher/grading", label: "批改", badge: pending },
           { href: "/teacher/stats", label: "成绩统计" },
+          { href: "/teacher/assistant", label: "AI 助手" },
           { href: "/teacher/ai", label: "AI 接口" },
         ]}
       />
