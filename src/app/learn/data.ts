@@ -11,29 +11,38 @@ export async function loadLearnData(userId: string) {
   // 只显示至少有一个已开放课时的课程：老师还没开放的课程（含空白占位课）学生看不到
   const openCourseIds = new Set(lessons.map((l) => l.courseId));
   const courseIds = (await studentCourseIds(userId)).filter((id) => openCourseIds.has(id));
-  const courses = courseIds.length
-    ? await db.select().from(schema.courses).where(inArray(schema.courses.id, courseIds)).orderBy(asc(schema.courses.createdAt))
-    : [];
-
   const ids = lessons.map((l) => l.id);
-  const mods = ids.length
-    ? await db.select({ id: schema.modules.id, lessonId: schema.modules.lessonId, type: schema.modules.type }).from(schema.modules).where(inArray(schema.modules.lessonId, ids))
-    : [];
-  const done = mods.length
-    ? await db
-        .select({ id: schema.moduleProgress.moduleId })
-        .from(schema.moduleProgress)
-        .where(and(eq(schema.moduleProgress.userId, userId), inArray(schema.moduleProgress.moduleId, mods.map((m) => m.id))))
-    : [];
+  // 这几组查询互不依赖，同时发出，页面等待时间 = 最慢的那一个
+  const [courses, mods, done, scoredMods, subs] = await Promise.all([
+    courseIds.length
+      ? db.select().from(schema.courses).where(inArray(schema.courses.id, courseIds)).orderBy(asc(schema.courses.createdAt))
+      : [],
+    ids.length
+      ? db.select({ id: schema.modules.id, lessonId: schema.modules.lessonId, type: schema.modules.type }).from(schema.modules).where(inArray(schema.modules.lessonId, ids))
+      : [],
+    ids.length
+      ? db
+          .select({ id: schema.moduleProgress.moduleId })
+          .from(schema.moduleProgress)
+          .innerJoin(schema.modules, eq(schema.modules.id, schema.moduleProgress.moduleId))
+          .where(and(eq(schema.moduleProgress.userId, userId), inArray(schema.modules.lessonId, ids)))
+      : [],
+    // 计分项（习题、可计分的互动内容）：只取需要算满分的数据，避免把图文正文都读出来
+    ids.length
+      ? db
+          .select({ id: schema.modules.id, lessonId: schema.modules.lessonId, type: schema.modules.type, data: schema.modules.data })
+          .from(schema.modules)
+          .where(and(inArray(schema.modules.lessonId, ids), inArray(schema.modules.type, ["QUIZ", "HTML"])))
+      : [],
+    ids.length
+      ? db
+          .select({ moduleId: schema.submissions.moduleId, score: schema.submissions.score })
+          .from(schema.submissions)
+          .innerJoin(schema.modules, eq(schema.modules.id, schema.submissions.moduleId))
+          .where(and(eq(schema.submissions.userId, userId), inArray(schema.modules.lessonId, ids)))
+      : [],
+  ]);
   const doneSet = new Set(done.map((d) => d.id));
-
-  // 计分项（习题、可计分的互动内容）：只取需要算满分的数据，避免把图文正文都读出来
-  const scoredMods = ids.length
-    ? await db
-        .select({ id: schema.modules.id, lessonId: schema.modules.lessonId, type: schema.modules.type, data: schema.modules.data })
-        .from(schema.modules)
-        .where(and(inArray(schema.modules.lessonId, ids), inArray(schema.modules.type, ["QUIZ", "HTML"])))
-    : [];
   const scoredList = scoredMods
     .map((m) => ({
       id: m.id,
@@ -43,12 +52,6 @@ export async function loadLearnData(userId: string) {
         : (m.data as unknown as HtmlData).scored ? ((m.data as unknown as HtmlData).maxScore ?? 100) : 0,
     }))
     .filter((m) => m.max > 0);
-  const subs = scoredList.length
-    ? await db
-        .select({ moduleId: schema.submissions.moduleId, score: schema.submissions.score })
-        .from(schema.submissions)
-        .where(and(eq(schema.submissions.userId, userId), inArray(schema.submissions.moduleId, scoredList.map((m) => m.id))))
-    : [];
   const subScore = new Map(subs.map((s) => [s.moduleId, s.score]));
 
   // 按课程排列，这样“继续学习”先走完第一门课

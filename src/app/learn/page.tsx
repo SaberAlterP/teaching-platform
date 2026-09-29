@@ -47,7 +47,7 @@ export default async function LearnHome() {
               const done = items.filter((s) => s.pct === 100).length;
               const pct = items.length ? Math.round((done / items.length) * 100) : 0;
               return (
-                <Link key={c.id} href={`/learn/course/${c.id}`} className="group block">
+                <Link key={c.id} href={`/learn/course/${c.id}`} prefetch={false} className="group block">
                   <CourseCard title={c.title} description={c.description} index={i}>
                     <div className="mb-1 flex justify-between text-xs text-slate-500">
                       <span>已完成 {done}/{items.length} 课</span>

@@ -28,6 +28,7 @@ export function LessonTile({ t, fallbackNo }: { t: TileInfo; fallbackNo: string 
   return (
     <Link
       href={`/learn/${t.id}`}
+      prefetch={false}
       title={t.summary || undefined}
       className={`group flex min-h-36 flex-col rounded-2xl border p-3.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:p-4 ${tone}`}
     >

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireStudent } from "@/lib/auth";
 import { visibleLessonsFor } from "@/lib/course";
@@ -13,7 +13,20 @@ export default async function GradesPage() {
   const courseTitle = new Map(courses.map((c) => [c.id, c.title]));
   const multi = courses.length > 1;
   const ids = lessons.map((l) => l.id);
-  const mods = ids.length ? await db.select().from(schema.modules).where(inArray(schema.modules.lessonId, ids)) : [];
+  // 图文正文很大，成绩页用不到：只有习题和互动内容才读 data
+  const mods = ids.length
+    ? await db
+        .select({
+          id: schema.modules.id,
+          lessonId: schema.modules.lessonId,
+          order: schema.modules.order,
+          type: schema.modules.type,
+          title: schema.modules.title,
+          data: sql<Record<string, unknown>>`case when ${schema.modules.type} in ('QUIZ', 'HTML') then ${schema.modules.data} else '{}'::jsonb end`,
+        })
+        .from(schema.modules)
+        .where(inArray(schema.modules.lessonId, ids))
+    : [];
   const scored = mods.filter((m) => m.type === "QUIZ" || (m.type === "HTML" && (m.data as unknown as HtmlData).scored));
   const subs = await db.select().from(schema.submissions).where(eq(schema.submissions.userId, u.id));
   const subMap = new Map(subs.map((s) => [s.moduleId, s]));
