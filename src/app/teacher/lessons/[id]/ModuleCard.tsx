@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   MODULE_LABELS, type HtmlData, type MediaData, type ModuleType, type QuizData, type RichTextData,
 } from "@/lib/modules";
@@ -33,6 +33,17 @@ export function ModuleCard(p: {
   const [saved, setSaved] = useState(false);
   const [pending, start] = useTransition();
   const dirty = title !== m.title || JSON.stringify(data) !== JSON.stringify(m.data);
+  // 模块在别处被改了（例如 AI 助手）：老师没有未保存的修改就跟着更新
+  const base = useRef({ title: m.title, data: m.data });
+  useEffect(() => {
+    const b = base.current;
+    base.current = { title: m.title, data: m.data };
+    if (title === b.title && JSON.stringify(data) === JSON.stringify(b.data)) {
+      setTitle(m.title);
+      setData(m.data);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [m.title, m.data]);
 
   function save() {
     start(async () => {
