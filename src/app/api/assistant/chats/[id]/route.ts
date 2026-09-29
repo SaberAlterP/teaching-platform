@@ -17,14 +17,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     .from(c)
     .where(and(eq(c.id, id), eq(c.teacherId, s.uid)));
   if (!chat) return NextResponse.json({ error: "对话不存在" }, { status: 404 });
-  markWatched(chat.id);
+  const url = new URL(req.url);
+  // watch=0：界面收起了，看不到动画预览，AI 检查草稿时不用等它
+  if (url.searchParams.get("watch") !== "0") markWatched(chat.id);
   // 服务器重启后，数据库里还是“运行中”，但实际已经停了
   if (["running", "queued"].includes(chat.status) && !isRunning(chat.id)) {
     chat.status = "stopped";
     chat.error = "服务器重启过，任务中断了，点“继续”接着做";
     await db.update(schema.aiChats).set({ status: chat.status, error: chat.error }).where(eq(schema.aiChats.id, chat.id));
   }
-  const from = Math.max(0, Number(new URL(req.url).searchParams.get("from")) || 0);
+  const from = Math.max(0, Number(url.searchParams.get("from")) || 0);
   const messages =
     getJobMessages(chat.id) ??
     ((await db.select({ m: c.messages }).from(c).where(eq(c.id, chat.id)))[0]?.m as StoredMessage[] | undefined) ??
