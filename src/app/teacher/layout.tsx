@@ -21,7 +21,7 @@ export default async function TeacherLayout({ children }: { children: React.Reac
         role="TEACHER"
         switcher={<CourseSwitcher current={course.id} courses={courses.map((c) => ({ id: c.id, title: c.title }))} />}
         links={[
-          { href: "/teacher", label: "课程内容" },
+          { href: "/teacher", label: "我的课程" },
           { href: "/teacher/students", label: "学生" },
           { href: "/teacher/grading", label: "批改", badge: pending },
           { href: "/teacher/stats", label: "成绩统计" },

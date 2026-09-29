@@ -53,7 +53,7 @@ export function LessonEditor({
     <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
       <div className="min-w-0 space-y-4">
         <div className="flex items-center gap-2 text-sm text-slate-500">
-          <Link href="/teacher" className="hover:text-brand-600">← 课时列表</Link>
+          <Link href="/teacher/course" className="hover:text-brand-600">← 课时列表</Link>
           {pending && <span className="ml-auto text-xs">保存中…</span>}
         </div>
         <LessonMeta lesson={lesson} sections={sections} />

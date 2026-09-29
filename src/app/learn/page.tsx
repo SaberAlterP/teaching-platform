@@ -1,42 +1,11 @@
 import Link from "next/link";
-import { and, asc, eq, inArray } from "drizzle-orm";
-import { db, schema } from "@/db";
 import { requireStudent } from "@/lib/auth";
-import { studentCourseIds, visibleLessonsFor } from "@/lib/course";
-import { groupBySection } from "@/lib/sections";
+import { CourseCard } from "@/components/CourseCard";
+import { loadLearnData } from "./data";
 
 export default async function LearnHome() {
   const u = await requireStudent();
-  const lessons = await visibleLessonsFor(u.id);
-  const courseIds = await studentCourseIds(u.id);
-  const courses = courseIds.length
-    ? await db.select().from(schema.courses).where(inArray(schema.courses.id, courseIds)).orderBy(asc(schema.courses.createdAt))
-    : [];
-
-  const ids = lessons.map((l) => l.id);
-  const mods = ids.length
-    ? await db.select({ id: schema.modules.id, lessonId: schema.modules.lessonId }).from(schema.modules).where(inArray(schema.modules.lessonId, ids))
-    : [];
-  const done = mods.length
-    ? await db
-        .select({ id: schema.moduleProgress.moduleId })
-        .from(schema.moduleProgress)
-        .where(and(eq(schema.moduleProgress.userId, u.id), inArray(schema.moduleProgress.moduleId, mods.map((m) => m.id))))
-    : [];
-  const doneSet = new Set(done.map((d) => d.id));
-
-  // 按课程排列，这样“继续学习”先走完第一门课
-  const courseRank = new Map(courses.map((c, i) => [c.id, i]));
-  const ordered = [...lessons].sort((a, b) => (courseRank.get(a.courseId) ?? 0) - (courseRank.get(b.courseId) ?? 0));
-  const stats = ordered.map((l) => {
-    const lm = mods.filter((m) => m.lessonId === l.id);
-    const d = lm.filter((m) => doneSet.has(m.id)).length;
-    return { lesson: l, done: d, total: lm.length, pct: lm.length ? Math.round((d / lm.length) * 100) : 0 };
-  });
-  const allDone = stats.reduce((a, s) => a + s.done, 0);
-  const allTotal = stats.reduce((a, s) => a + s.total, 0);
-  const overall = allTotal ? Math.round((allDone / allTotal) * 100) : 0;
-  const next = stats.find((s) => s.pct < 100);
+  const { courses, stats, lessonsDone, overall, next } = await loadLearnData(u.id);
 
   return (
     <div className="space-y-6">
@@ -44,16 +13,14 @@ export default async function LearnHome() {
         <div className="flex flex-wrap items-end gap-6">
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl font-bold sm:text-3xl">你好，{u.name}</h1>
-            {courses.map((c) => (
-              <p key={c.id} className="mt-2 text-white/85">
-                {c.title}{c.description ? ` · ${c.description}` : ""}
-              </p>
-            ))}
+            <p className="mt-2 text-white/85">
+              {courses.length ? `你正在学习 ${courses.length} 门课程，已完成 ${lessonsDone}/${stats.length} 课` : "还没有加入课程"}
+            </p>
           </div>
           {stats.length > 0 && (
             <div className="w-full sm:w-64">
               <div className="mb-1.5 flex justify-between text-sm text-white/85">
-                <span>课程总进度</span>
+                <span>总进度</span>
                 <span>{overall}%</span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-white/25">
@@ -69,60 +36,32 @@ export default async function LearnHome() {
         </div>
       </div>
 
-      {stats.length === 0 ? (
+      {courses.length === 0 ? (
         <div className="card p-10 text-center text-slate-400">老师还没有开放课程内容</div>
       ) : (
-        courses
-          .map((c) => ({ c, items: stats.filter((s) => s.lesson.courseId === c.id) }))
-          .filter((g) => g.items.length)
-          .map(({ c, items }) => (
-            <section key={c.id} className="space-y-3">
-              {courses.length > 1 && <h2 className="text-lg font-bold">{c.title}</h2>}
-              {groupBySection(items.map((s) => ({ ...s, section: s.lesson.section }))).map((g, gi) => {
-                const grid = (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {g.items.map(({ item: { lesson: l, done: d, total, pct }, index: i }) => (
-                  <Link key={l.id} href={`/learn/${l.id}`} className="card group flex flex-col p-5 transition hover:-translate-y-0.5 hover:border-brand-500 hover:shadow-md">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-brand-600">第 {i + 1} 课</span>
-                      <span
-                        className={`badge ml-auto ${
-                          pct === 100 ? "bg-emerald-50 text-emerald-700" : pct ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        {pct === 100 ? "已完成" : pct ? "学习中" : "未开始"}
-                      </span>
+        <>
+          <h2 className="text-lg font-bold">我的课程</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {courses.map((c, i) => {
+              const items = stats.filter((s) => s.lesson.courseId === c.id);
+              const done = items.filter((s) => s.pct === 100).length;
+              const pct = items.length ? Math.round((done / items.length) * 100) : 0;
+              return (
+                <Link key={c.id} href={`/learn/course/${c.id}`} className="group block">
+                  <CourseCard title={c.title} description={c.description} index={i}>
+                    <div className="mb-1 flex justify-between text-xs text-slate-500">
+                      <span>已完成 {done}/{items.length} 课</span>
+                      <span>{pct}%</span>
                     </div>
-                    <div className="mt-2 text-lg font-bold group-hover:text-brand-600">{l.title}</div>
-                    {l.summary && <p className="mt-1 line-clamp-2 text-sm text-slate-500">{l.summary}</p>}
-                    <div className="mt-auto pt-4">
-                      <div className="mb-1 flex justify-between text-xs text-slate-500">
-                        <span>{d}/{total} 个环节</span>
-                        <span>{pct}%</span>
-                      </div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                        <div className={`h-full rounded-full ${pct === 100 ? "bg-emerald-500" : "bg-brand-500"}`} style={{ width: `${pct}%` }} />
-                      </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                      <div className={`h-full rounded-full ${pct === 100 ? "bg-emerald-500" : "bg-brand-500"}`} style={{ width: `${pct}%` }} />
                     </div>
-                  </Link>
-                ))}
-              </div>
-                );
-                if (!g.section) return <div key={gi}>{grid}</div>;
-                const gDone = g.items.filter((x) => x.item.pct === 100).length;
-                return (
-                  <details key={gi} open={gDone < g.items.length} className="group/sec space-y-3">
-                    <summary className="flex cursor-pointer list-none items-center gap-2 py-1 select-none">
-                      <span className="text-slate-400 transition group-open/sec:rotate-90">▶</span>
-                      <span className="font-bold text-slate-700">{g.section}</span>
-                      <span className="text-sm text-slate-400">已完成 {gDone}/{g.items.length} 课</span>
-                    </summary>
-                    <div className="pt-1">{grid}</div>
-                  </details>
-                );
-              })}
-            </section>
-          ))
+                  </CourseCard>
+                </Link>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );
