@@ -144,6 +144,75 @@ export const apiKeys = pgTable("api_keys", {
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
 });
 
+// ---- AI 助手（DeepSeek）----
+// 每位老师的 DeepSeek 设置；密钥用 AUTH_SECRET 派生的密钥加密保存
+export const aiSettings = pgTable("ai_settings", {
+  teacherId: text("teacher_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  apiKeyEnc: text("api_key_enc").notNull().default(""),
+  apiKeyHint: text("api_key_hint").notNull().default(""), // 密钥开头几位，方便辨认
+  model: text("model").notNull().default("deepseek-flash"),
+  baseUrl: text("base_url").notNull().default("https://api.deepseek.com"),
+  thinking: boolean("thinking").notNull().default(true),
+  updatedAt: updatedAt(),
+});
+
+// 一次对话：完整消息记录（发给模型的格式）和运行状态
+export const aiChats = pgTable(
+  "ai_chats",
+  {
+    id: id(),
+    teacherId: text("teacher_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default("新对话"),
+    courseId: text("course_id"), // 对话开始时老师所在的课程
+    lessonId: text("lesson_id"), // 从课时编辑页打开时的课时
+    messages: jsonb("messages").notNull().default([]).$type<unknown[]>(),
+    // idle / queued / running / waiting（等老师确认）/ stopped / error
+    status: text("status").notNull().default("idle"),
+    error: text("error").notNull().default(""),
+    pending: jsonb("pending").$type<{ toolCallId: string; name: string; summary: string } | null>(),
+    decisions: jsonb("decisions").notNull().default({}).$type<Record<string, "approve" | "reject">>(),
+    notes: jsonb("notes").notNull().default([]).$type<string[]>(), // 下一条消息要告诉 AI 的事（例如老师撤销了哪些改动）
+    usage: jsonb("usage").notNull().default({}).$type<Record<string, number>>(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("ai_chats_teacher_idx").on(t.teacherId)],
+);
+
+// AI 做的每一次改动，保存改动前后的内容，用于撤销
+export const aiChanges = pgTable(
+  "ai_changes",
+  {
+    id: id(),
+    chatId: text("chat_id").notNull().references(() => aiChats.id, { onDelete: "cascade" }),
+    toolCallId: text("tool_call_id").notNull(),
+    kind: text("kind").notNull(), // module.create / module.update / module.delete / module.reorder / lesson.* / course.*
+    targetId: text("target_id").notNull(),
+    label: text("label").notNull().default(""),
+    before: jsonb("before").$type<Record<string, unknown> | null>(),
+    after: jsonb("after").$type<Record<string, unknown> | null>(),
+    undone: boolean("undone").notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [index("ai_changes_chat_idx").on(t.chatId)],
+);
+
+// 技能：写给 AI 的规范说明。内置技能在代码里（src/lib/ai/skills.ts），老师修改后的版本和自建技能存这里
+export const aiSkills = pgTable(
+  "ai_skills",
+  {
+    id: id(),
+    teacherId: text("teacher_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(), // 内置技能的标识，或自建技能的名称
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    content: text("content").notNull().default(""),
+    enabled: boolean("enabled").notNull().default(true),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("ai_skills_teacher_slug").on(t.teacherId, t.slug)],
+);
+
 export const lessonsRelations = relations(lessons, ({ many }) => ({ modules: many(modules) }));
 export const modulesRelations = relations(modules, ({ one }) => ({
   lesson: one(lessons, { fields: [modules.lessonId], references: [lessons.id] }),
@@ -154,3 +223,5 @@ export type Lesson = typeof lessons.$inferSelect;
 export type Module = typeof modules.$inferSelect;
 export type Submission = typeof submissions.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
+export type AiChat = typeof aiChats.$inferSelect;
+export type AiChange = typeof aiChanges.$inferSelect;
