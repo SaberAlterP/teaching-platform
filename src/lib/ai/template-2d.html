@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>示例：货车装货流程</title>
+<style>
+:root{--ink:#1f2a3a;--line:#243447;--bg:#e9f0f7;--card:#fff;--brand:#2f6fed;--ok:#1f9d55;--bad:#d64545;--muted:#6b7a90}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:var(--ink);background:var(--bg)}
+#app{display:flex;flex-direction:column;height:100%}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 14px;background:var(--card);border-bottom:2px solid var(--line)}
+header h1{font-size:17px;margin:0 8px 0 0}
+.tabs{display:flex;gap:6px}
+button{font:inherit;cursor:pointer;border:2px solid var(--line);background:#fff;color:var(--ink);border-radius:10px;padding:6px 14px}
+button.on,button.primary{background:var(--brand);border-color:#1a48a8;color:#fff}
+button:disabled{opacity:.45;cursor:not-allowed}
+#score{margin-left:auto;font-weight:700}
+.view{flex:1;min-height:0;display:flex;flex-direction:column}
+.view[hidden]{display:none}
+#stage{flex:1;min-height:240px;position:relative}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+#caption{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);width:min(92%,760px);background:rgba(255,255,255,.95);border:2px solid var(--line);border-radius:12px;padding:10px 16px;font-size:15px;line-height:1.7;box-shadow:0 4px 0 rgba(36,52,71,.18)}
+#caption b{color:var(--brand)}
+.ctrl{display:flex;gap:8px;align-items:center;justify-content:center;padding:8px;background:var(--card);border-top:2px solid var(--line)}
+.quiz{flex:1;overflow:auto;padding:16px}
+.q{max-width:760px;margin:0 auto 14px;background:var(--card);border:2px solid var(--line);border-radius:14px;padding:14px 16px}
+.q h3{margin:0 0 10px;font-size:16px}
+.opt{display:block;width:100%;text-align:left;margin:6px 0}
+.opt.right{background:#e3f6ea;border-color:var(--ok)}
+.opt.wrong{background:#fde8e8;border-color:var(--bad)}
+.explain{margin-top:8px;color:var(--muted);font-size:14px}
+@media (max-width:640px){#caption{font-size:13px;padding:8px 10px}header h1{font-size:15px}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>货车装货流程</h1>
+    <nav class="tabs">
+      <button data-view="learn" class="on">① 动画讲解</button>
+      <button data-view="quiz">② 小题</button>
+    </nav>
+    <span id="score">得分 0 / 100</span>
+  </header>
+
+  <section id="learn" class="view">
+    <div id="stage"><canvas id="cv"></canvas><div id="caption"></div></div>
+    <div class="ctrl">
+      <button id="prev">上一步</button>
+      <button id="play" class="primary">暂停</button>
+      <button id="next">下一步</button>
+      <span id="stepNo"></span>
+    </div>
+  </section>
+
+  <section id="quiz" class="view" hidden><div class="quiz" id="quizBox"></div></section>
+</div>
+
+<script>
+// ---------- 与平台通信（成绩 0~100，重复上报时平台保留最高分） ----------
+const TP = {
+  report(score) { try { parent.postMessage({ type: "tp:score", score: Math.round(score), max: 100 }, "*"); } catch (e) {} },
+  complete() { try { parent.postMessage({ type: "tp:complete" }, "*"); } catch (e) {} },
+};
+
+// ---------- 画布：适配高清屏和窗口大小 ----------
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+let W = 0, H = 0;
+function resize() {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const r = cv.getBoundingClientRect();
+  W = r.width; H = r.height;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+new ResizeObserver(resize).observe(cv);
+
+// ---------- 画风工具：描边 + 分层配色（亮面/暗面） ----------
+const LINE = "#243447";
+function box(x, y, w, h, fill, shade, r = 6) {
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fillStyle = fill; ctx.fill();
+  if (shade) { ctx.save(); ctx.clip(); ctx.fillStyle = shade; ctx.fillRect(x, y + h * 0.62, w, h * 0.38); ctx.restore(); }
+  ctx.lineWidth = 2.5; ctx.strokeStyle = LINE; ctx.stroke();
+}
+function circle(x, y, r, fill) {
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = fill; ctx.fill();
+  ctx.lineWidth = 2.5; ctx.strokeStyle = LINE; ctx.stroke();
+}
+const lerp = (a, b, t) => a + (b - a) * Math.max(0, Math.min(1, t));
+const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+
+// ---------- 场景元素 ----------
+function drawTruck(x, y, load) {
+  box(x, y, 220, 90, "#f4f7fb", "#dde5ef");            // 车厢
+  for (let i = 0; i < load; i++) box(x + 10 + (i % 4) * 50, y + 50 - Math.floor(i / 4) * 38, 46, 36, "#e8a94f", "#c98a34", 3); // 货箱
+  box(x + 224, y + 30, 70, 60, "#2f6fed", "#1f5ad4");   // 车头
+  box(x + 238, y + 38, 40, 22, "#cfe3ff", null, 3);      // 车窗
+  circle(x + 50, y + 100, 16, "#38414f"); circle(x + 180, y + 100, 16, "#38414f"); circle(x + 262, y + 100, 16, "#38414f");
+}
+// 氛围动效：飘动的云、远处车流；帧率低时自动减少
+let lite = false;
+function drawBackground(time) {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#cfe6ff"); g.addColorStop(1, "#eef6ff");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const clouds = lite ? 2 : 5;
+  for (let i = 0; i < clouds; i++) {
+    const x = ((time * (8 + i * 3) + i * 260) % (W + 200)) - 100;
+    const y = 40 + i * 22;
+    ctx.globalAlpha = 0.85; circle(x, y, 18, "#fff"); circle(x + 22, y - 6, 22, "#fff"); circle(x + 46, y, 16, "#fff"); ctx.globalAlpha = 1;
+  }
+  const ground = H * 0.72;
+  box(-4, ground, W + 8, H - ground + 4, "#9fb3c8", "#8aa0b7", 0);
+  if (!lite) for (let i = 0; i < 3; i++) { // 远处车流
+    const x = ((time * 60 + i * 400) % (W + 120)) - 60;
+    box(x, ground - 22, 40, 16, ["#f06a5d", "#4fb286", "#f2c14e"][i], null, 4);
+  }
+}
+
+// ---------- 分步讲解：每步有字幕，可暂停、上一步、下一步 ----------
+const STEPS = [
+  { title: "接单核对", text: "调度员核对<b>货物清单</b>：品名、件数、重量、体积。", dur: 5 },
+  { title: "车辆进场", text: "货车倒入月台，<b>垫好轮挡</b>后才能开始装货。", dur: 5 },
+  { title: "重货在下", text: "装载遵循<b>重不压轻、大不压小</b>，重货放底层并靠近车厢中部。", dur: 6 },
+  { title: "加固封车", text: "装完后<b>加固、施封</b>，记录封号，交接单签字。", dur: 5 },
+];
+let step = 0, t = 0, playing = true, last = performance.now(), slowFrames = 0;
+const caption = document.getElementById("caption"), stepNo = document.getElementById("stepNo"), playBtn = document.getElementById("play");
+function setStep(i) {
+  step = Math.max(0, Math.min(STEPS.length - 1, i)); t = 0;
+  caption.innerHTML = `<b>第 ${step + 1} 步 · ${STEPS[step].title}</b>　${STEPS[step].text}`;
+  stepNo.textContent = `${step + 1} / ${STEPS.length}`;
+}
+document.getElementById("prev").onclick = () => setStep(step - 1);
+document.getElementById("next").onclick = () => setStep(step + 1);
+playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? "暂停" : "播放"; };
+
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (dt > 0.05) { if (++slowFrames > 30) lite = true; } else slowFrames = Math.max(0, slowFrames - 1);
+  if (playing && !document.getElementById("learn").hidden) {
+    t += dt;
+    if (t > STEPS[step].dur && step < STEPS.length - 1) setStep(step + 1);
+  }
+  if (W > 0) {
+    drawBackground(now / 1000);
+    const p = ease(Math.min(1, t / 2.5));
+    const ground = H * 0.72;
+    const tx = step === 0 ? -320 : step === 1 ? lerp(-320, W * 0.25, p) : W * 0.25;
+    const load = step < 2 ? 0 : step === 2 ? Math.floor(lerp(0, 8, t / 4)) : 8;
+    drawTruck(tx, ground - 116, load);
+    if (step === 0) box(W * 0.35, ground - 150, 220, 130, "#fffdf5", "#f3ecd9", 8); // 货物清单
+  }
+  requestAnimationFrame(frame);
+}
+setStep(0);
+requestAnimationFrame(frame);
+
+// ---------- 小题：配套交互小问 + 额外 1~2 题，自动判分 ----------
+const QUESTIONS = [
+  { q: "装车前必须先做哪一步？", options: ["直接装货", "垫好轮挡", "先施封"], answer: 1, explain: "车辆停稳后先垫轮挡，防止溜车。" },
+  { q: "重货应放在哪里？", options: ["车厢顶层", "车厢底层并靠近中部", "车厢尾门处"], answer: 1, explain: "重货在下、居中，重心低且前后轴荷均衡。" },
+  { q: "（拓展）封车后需要记录什么？", options: ["封号", "司机爱好", "天气"], answer: 0, explain: "记录封号便于交接和追溯。" },
+];
+const answered = {};
+function renderQuiz() {
+  const boxEl = document.getElementById("quizBox");
+  boxEl.innerHTML = "";
+  QUESTIONS.forEach((item, qi) => {
+    const div = document.createElement("div");
+    div.className = "q";
+    div.innerHTML = `<h3>${qi + 1}. ${item.q}</h3>`;
+    item.options.forEach((o, oi) => {
+      const b = document.createElement("button");
+      b.className = "opt"; b.textContent = `${"ABCD"[oi]}. ${o}`;
+      if (answered[qi] !== undefined) {
+        b.disabled = true;
+        if (oi === item.answer) b.classList.add("right");
+        else if (oi === answered[qi]) b.classList.add("wrong");
+      }
+      b.onclick = () => { answered[qi] = oi; renderQuiz(); updateScore(); };
+      div.appendChild(b);
+    });
+    if (answered[qi] !== undefined) div.insertAdjacentHTML("beforeend", `<div class="explain">解析：${item.explain}</div>`);
+    boxEl.appendChild(div);
+  });
+  const again = document.createElement("button");
+  again.textContent = "重做一遍（平台保留最高分）";
+  again.onclick = () => { for (const k in answered) delete answered[k]; renderQuiz(); updateScore(); };
+  boxEl.appendChild(again);
+}
+function updateScore() {
+  const right = QUESTIONS.filter((q, i) => answered[i] === q.answer).length;
+  const score = (right / QUESTIONS.length) * 100;
+  document.getElementById("score").textContent = `得分 ${Math.round(score)} / 100`;
+  if (Object.keys(answered).length === QUESTIONS.length) { TP.report(score); TP.complete(); }
+}
+renderQuiz();
+
+// ---------- 页签切换 ----------
+document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
+  document.querySelectorAll(".view").forEach((v) => (v.hidden = v.id !== b.dataset.view));
+}));
+</script>
+</body>
+</html>

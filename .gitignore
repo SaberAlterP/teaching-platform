@@ -29,3 +29,5 @@ Thumbs.db
 
 # 本地 AI 协作说明
 CLAUDE.md
+# 构建时生成的前端库（scripts/build-libs.mjs）
+/public/lib/

@@ -54,6 +54,22 @@ parent.postMessage({ type: "tp:complete" }, "*");                    // 标记�
 
 示例见 `demo-content/src/`。
 
+平台内置 three.js（构建时由 `scripts/build-libs.mjs` 生成到 `public/lib/`），HTML 包里可以直接引用，不用自己打包：
+
+```html
+<script type="importmap">{"imports":{"three":"/lib/three/three.module.js","three/addons":"/lib/three/addons.js"}}</script>
+```
+
 ## AI 接口
 
 教师在“AI 接口”页面生成密钥，交给 AI 助手后，它可以通过 `/api/ai` 读写该教师所有课程的内容（用 `?course=<课程ID>` 指定课程）（请求头 `Authorization: Bearer tpk_...`）。能新建课程、新建和修改课时、增删改模块、上传文件和 HTML 包；不能删除课时，也访问不到学生和成绩。`GET /api/ai` 返回全部接口说明。密钥只存哈希，可随时撤销。
+
+## AI 助手（DeepSeek）
+
+教师后台“AI 助手”页面：在“设置”里填写 DeepSeek 密钥（加密保存在服务器，默认模型 `deepseek-flash`，可更换），然后用对话让 AI 直接修改课时、出题、做 HTML 互动动画、按大纲从零建课。
+
+- AI 通过一组工具读写该教师自己的课程（`src/lib/ai/tools.ts`）；新建的课时都是草稿；修改已开放的课时、开放课时前会弹出确认；不能删除课时，看不到学生和成绩。
+- 每一步改动都记录在 `ai_changes`，对话里可以逐条撤销（14 天内）。
+- HTML 动画先写在对话的草稿区，右侧实时预览；预览页会把运行报错交回服务器，AI 检查、修复后再发布到课时。
+- “技能”是写给 AI 的规范说明（画风、出题、建课流程、3D 写法等），内置的在 `src/lib/ai/skills.ts`，教师可以在页面上修改或新增。
+- 同一时间最多运行 2 个 AI 任务，其余排队；服务器重启会中断正在运行的任务，点“继续”即可接着做。

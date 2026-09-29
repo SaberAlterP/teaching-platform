@@ -13,6 +13,7 @@ export const MAX_FILE = 200 * 1024 * 1024; // 图片/视频单文件 200MB（边
 export const MAX_PACKAGE = 100 * 1024 * 1024; // HTML 包 100MB（zip 解压需要读进内存）
 const MAX_UNZIPPED = 500 * 1024 * 1024; // zip 解压后总大小上限，防止"压缩炸弹"
 const TMP_DIR = path.join(UPLOAD_DIR, ".tmp");
+export const UNDO_DAYS = 14; // AI 助手的改动在这么多天内可以撤销
 
 export function assetDir(id: string) {
   if (!/^[A-Za-z0-9_-]+$/.test(id)) throw new Error("bad id");
@@ -128,7 +129,12 @@ export async function cleanupOrphanAssets() {
   const old = await db.select({ id: schema.assets.id }).from(schema.assets).where(lt(schema.assets.createdAt, cutoff));
   if (!old.length) return 0;
   const rows = await db.select({ data: sql<string>`${schema.modules.data}::text` }).from(schema.modules);
-  const all = rows.map((r) => r.data).join("\n");
+  // AI 助手改动记录里的旧版本也算引用（撤销时要用），只看可撤销期限内的
+  const kept = await db
+    .select({ data: sql<string>`coalesce(${schema.aiChanges.before}::text, '') || coalesce(${schema.aiChanges.after}::text, '')` })
+    .from(schema.aiChanges)
+    .where(sql`${schema.aiChanges.undone} = false and ${schema.aiChanges.createdAt} > now() - interval '${sql.raw(String(UNDO_DAYS))} days'`);
+  const all = [...rows, ...kept].map((r) => r.data).join("\n");
   const orphans = old.filter((a) => !all.includes(a.id));
   for (const a of orphans) {
     await db.delete(schema.assets).where(eq(schema.assets.id, a.id));
