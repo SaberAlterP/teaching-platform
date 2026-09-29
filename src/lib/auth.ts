@@ -32,12 +32,15 @@ export async function requireStudent() {
   return u;
 }
 
+// 学生不强制改密码（初始密码就是学号）；只有仍在用默认密码的教师账号才要求首次登录改密码
+export const mustChangeNow = (u: schema.User) => u.role === "TEACHER" && u.mustChangePassword;
+
 export async function startSession(user: schema.User) {
   const token = await signSession({
     uid: user.id,
     role: user.role,
     name: user.name,
-    mcp: user.mustChangePassword,
+    mcp: mustChangeNow(user),
   });
   (await cookies()).set(SESSION_COOKIE, token, cookieOptions);
 }

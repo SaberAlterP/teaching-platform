@@ -19,6 +19,8 @@ npm run dev            # http://localhost:3000
 
 教师 `teacher` / `teacher123`（首次登录要求改密码）；演示学生 `240101`–`240130` / `123456`。
 
+学生账号规则：账号是学号，初始密码也是学号，登录时不强制改密码（学生可自行修改）。学生管理页可把单个学生或全班重置回学号。
+
 ## 部署
 
 ```bash
@@ -31,6 +33,15 @@ docker compose exec app node scripts/seed.mjs   # 首次部署执行一次
 
 更新：`git pull && docker compose up -d --build`（启动时自动执行数据库迁移）。
 使用 HTTPS 反向代理时，在 `.env` 里设置 `COOKIE_SECURE=true` 和 `TRUST_PROXY=true`。
+
+## 演示学生
+
+`scripts/demo-students.mjs` 往当前数据库加一批随机学生（学号 `demo` 开头，密码就是学号）和作答记录，用来看成绩统计效果，可随时删干净：
+
+```bash
+docker compose exec app node scripts/demo-students.mjs [--count 40]   # 生成
+docker compose exec app node scripts/demo-students.mjs --clean        # 删除
+```
 
 ## HTML 互动包
 
