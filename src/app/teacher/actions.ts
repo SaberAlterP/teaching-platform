@@ -36,11 +36,19 @@ export async function switchCourse(courseId: string) {
   revalidatePath("/teacher", "layout");
 }
 
+// 从首页的课程方块进入某门课：记住当前课程，再跳到它的课时页
+export async function openCourse(courseId: string) {
+  const t = await requireTeacher();
+  const { course } = await getTeacherCourse(t.id, courseId);
+  await selectCourse(course.id);
+  redirect("/teacher/course");
+}
+
 export async function newCourse(title: string) {
   const t = await requireTeacher();
   const course = await createCourse(t.id, title.trim().slice(0, 100) || "新课程");
   await selectCourse(course.id);
-  redirect("/teacher");
+  redirect("/teacher/course");
 }
 
 // 只允许删除空课程（没有课时、没有学生），防止误删内容和成绩
@@ -98,7 +106,7 @@ export async function deleteLesson(lessonId: string) {
   await assertLessonOwner(lessonId, t.id);
   await db.delete(schema.lessons).where(eq(schema.lessons.id, lessonId));
   await cleanupFiles();
-  revalidatePath("/teacher");
+  revalidatePath("/teacher", "layout");
 }
 
 export async function reorderLessons(ids: string[]) {
@@ -112,7 +120,7 @@ export async function reorderLessons(ids: string[]) {
         .where(and(eq(schema.lessons.id, ids[i]), eq(schema.lessons.courseId, course.id)));
     }
   });
-  revalidatePath("/teacher");
+  revalidatePath("/teacher", "layout");
 }
 
 export async function duplicateLesson(lessonId: string) {
@@ -127,7 +135,7 @@ export async function duplicateLesson(lessonId: string) {
     await db.insert(schema.modules).values(
       mods.map((m) => ({ lessonId: copy.id, order: m.order, type: m.type, title: m.title, data: m.data })),
     );
-  revalidatePath("/teacher");
+  revalidatePath("/teacher", "layout");
 }
 
 // 把课时（连同模块和学生作答）移到自己的另一门课程，排在末尾
@@ -178,7 +186,7 @@ async function doImportLesson(json: string) {
         lessonId: l.id, order: i, type: x.type, title: x.title ?? "", data: x.data as Record<string, unknown>,
       })),
     );
-  revalidatePath("/teacher");
+  revalidatePath("/teacher", "layout");
   return l.id;
 }
 

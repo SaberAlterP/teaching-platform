@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { splitTitle } from "@/lib/sections";
 
 export type TileInfo = {
   id: string;
@@ -13,12 +14,6 @@ export type TileInfo = {
   score: number | null; // 已提交的计分项得分合计，没提交过为 null
   maxScore: number;
 };
-
-// 标题以“5-3 ”开头时，把编号拆出来放在方块左上角
-export function splitTitle(title: string) {
-  const m = title.match(/^(\d+(?:[-.]\d+)+)\s+(.*)$/);
-  return m ? { no: m[1], name: m[2] } : { no: "", name: title };
-}
 
 const chip = "rounded-md px-1.5 py-0.5 text-[11px] font-medium";
 
