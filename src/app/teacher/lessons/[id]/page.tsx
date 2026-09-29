@@ -4,6 +4,7 @@ import { db, schema } from "@/db";
 import { requireTeacher } from "@/lib/auth";
 import { assertLessonOwner } from "@/lib/course";
 import type { HtmlData } from "@/lib/modules";
+import { LessonAiDock } from "../../assistant/LessonAiDock";
 import { LessonEditor } from "./LessonEditor";
 
 export default async function LessonEditPage({ params }: { params: Promise<{ id: string }> }) {
@@ -28,6 +29,7 @@ export default async function LessonEditPage({ params }: { params: Promise<{ id:
     .where(eq(schema.lessons.courseId, lesson.courseId));
 
   return (
+    <>
     <LessonEditor
       lesson={{
         id: lesson.id,
@@ -41,5 +43,7 @@ export default async function LessonEditPage({ params }: { params: Promise<{ id:
       modules={mods.map((m) => ({ id: m.id, type: m.type, title: m.title, data: m.data }))}
       packages={Object.fromEntries(assets.map((a) => [a.id, { filename: a.filename, url: `/pkg/${a.id}/${a.entry}` }]))}
     />
+    <LessonAiDock teacherId={t.id} lesson={{ id: lesson.id, title: lesson.title }} />
+    </>
   );
 }

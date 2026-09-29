@@ -4,6 +4,7 @@ import { requireTeacher } from "@/lib/auth";
 import { assertLessonOwner } from "@/lib/course";
 import { loadLessonView } from "@/lib/lesson-data";
 import { LessonView } from "@/components/modules/LessonView";
+import { LessonAiDock } from "../../../assistant/LessonAiDock";
 
 export default async function PreviewPage({ params }: { params: Promise<{ id: string }> }) {
   const t = await requireTeacher();
@@ -18,6 +19,7 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
         <Link href={`/teacher/lessons/${id}`} className="ml-auto font-medium underline">返回编辑</Link>
       </div>
       <LessonView title={lesson.title} summary={lesson.summary} {...v} preview />
+      <LessonAiDock teacherId={t.id} lesson={{ id: lesson.id, title: lesson.title }} />
     </div>
   );
 }

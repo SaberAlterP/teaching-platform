@@ -27,6 +27,8 @@ export function LessonEditor({
   const [drag, setDrag] = useState<number | null>(null);
   const [pending, start] = useTransition();
   useEffect(() => setMods(initial), [initial]);
+  // AI 发布的动画会带来新的 HTML 包
+  useEffect(() => setPkgs((p) => ({ ...p, ...initialPkgs })), [initialPkgs]);
 
   function add(type: ModuleType, at: number) {
     start(async () => {
@@ -56,7 +58,7 @@ export function LessonEditor({
           <Link href="/teacher/course" className="hover:text-brand-600">← 课时列表</Link>
           {pending && <span className="ml-auto text-xs">保存中…</span>}
         </div>
-        <LessonMeta lesson={lesson} sections={sections} />
+        <LessonMeta key={`${lesson.title}|${lesson.summary}|${lesson.section}`} lesson={lesson} sections={sections} />
 
         <div>
         <AddBar onAdd={(t) => add(t, 0)} compact={mods.length > 0} />
@@ -94,11 +96,11 @@ export function LessonEditor({
       </div>
 
       <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-        <PublishPanel lesson={lesson} />
+        <PublishPanel key={`${lesson.status}|${lesson.openAt}`} lesson={lesson} />
         <div className="card space-y-2 p-4 text-sm">
           <div className="font-semibold">AI 助手</div>
-          <Link href={`/teacher/assistant?lesson=${lesson.id}`} className="btn-primary w-full">让 AI 改这个课时</Link>
-          <p className="text-xs text-slate-400">告诉它要怎么改：改写内容、加题、做互动动画等。每一步都能撤销。</p>
+          <button className="btn-primary w-full" onClick={() => window.dispatchEvent(new Event("tp:ai-dock-open"))}>让 AI 改这个课时</button>
+          <p className="text-xs text-slate-400">在右侧窗口里告诉它要怎么改：改写内容、加题、做互动动画等。改完这里立即更新，每一步都能撤销。</p>
         </div>
         <div className="card space-y-2 p-4 text-sm">
           <div className="font-semibold">预览与导出</div>
