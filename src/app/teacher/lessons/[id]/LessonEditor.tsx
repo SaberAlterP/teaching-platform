@@ -98,11 +98,6 @@ export function LessonEditor({
       <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
         <PublishPanel key={`${lesson.status}|${lesson.openAt}`} lesson={lesson} />
         <div className="card space-y-2 p-4 text-sm">
-          <div className="font-semibold">AI 助手</div>
-          <button className="btn-primary w-full" onClick={() => window.dispatchEvent(new Event("tp:ai-dock-open"))}>让 AI 改这个课时</button>
-          <p className="text-xs text-slate-400">在右侧窗口里告诉它要怎么改：改写内容、加题、做互动动画等。改完这里立即更新，每一步都能撤销。</p>
-        </div>
-        <div className="card space-y-2 p-4 text-sm">
           <div className="font-semibold">预览与导出</div>
           <Link href={`/teacher/lessons/${lesson.id}/preview`} className="btn-outline w-full" target="_blank">
             以学生视角预览

@@ -135,13 +135,6 @@ export function AiDock({ lesson, chats, hasKey }: { lesson: { id: string; title:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vw]);
 
-  // 课时侧栏的“让 AI 改这个课时”按钮会发这个事件
-  useEffect(() => {
-    const open = () => setUi((u) => (u && u.mode === "closed" ? (store({ ...u, mode: u.last }), { ...u, mode: u.last }) : u));
-    window.addEventListener("tp:ai-dock-open", open);
-    return () => window.removeEventListener("tp:ai-dock-open", open);
-  }, []);
-
   // ---- 拖动：移动窗口、拉伸边缘 ----
   function drag(e: React.PointerEvent, move: (dx: number, dy: number, start: Saved) => Partial<Saved>) {
     if (!ui || e.button !== 0) return;
