@@ -4,8 +4,10 @@ WORKDIR /app
 # 使用国内 npm 镜像源（海外服务器可删掉下一行）
 RUN npm config set registry https://registry.npmmirror.com
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 COPY . .
+# 小内存服务器（1.6G）上构建：限制 Node 堆内存，避免内存耗尽把整台机器拖死
+ENV NODE_OPTIONS=--max-old-space-size=700 NEXT_TELEMETRY_DISABLED=1
 RUN npm run demo:build && npm run build
 
 # ---------- 运行 ----------
