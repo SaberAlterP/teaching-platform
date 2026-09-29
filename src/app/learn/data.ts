@@ -8,7 +8,9 @@ import type { TileInfo } from "./LessonTile";
 // 学生首页和课程页共用：学生所在的课程，以及每个已开放课时的进度、得分
 export async function loadLearnData(userId: string) {
   const lessons = await visibleLessonsFor(userId);
-  const courseIds = await studentCourseIds(userId);
+  // 只显示至少有一个已开放课时的课程：老师还没开放的课程（含空白占位课）学生看不到
+  const openCourseIds = new Set(lessons.map((l) => l.courseId));
+  const courseIds = (await studentCourseIds(userId)).filter((id) => openCourseIds.has(id));
   const courses = courseIds.length
     ? await db.select().from(schema.courses).where(inArray(schema.courses.id, courseIds)).orderBy(asc(schema.courses.createdAt))
     : [];

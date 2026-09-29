@@ -37,7 +37,7 @@ export default async function LearnHome() {
       </div>
 
       {courses.length === 0 ? (
-        <div className="card p-10 text-center text-slate-400">老师还没有把你加入课程</div>
+        <div className="card p-10 text-center text-slate-400">老师还没有开放课程内容</div>
       ) : (
         <>
           <h2 className="text-lg font-bold">我的课程</h2>
@@ -46,23 +46,16 @@ export default async function LearnHome() {
               const items = stats.filter((s) => s.lesson.courseId === c.id);
               const done = items.filter((s) => s.pct === 100).length;
               const pct = items.length ? Math.round((done / items.length) * 100) : 0;
-              const empty = items.length === 0;
               return (
                 <Link key={c.id} href={`/learn/course/${c.id}`} className="group block">
-                  <CourseCard title={c.title} description={c.description} index={i} muted={empty}>
-                    {empty ? (
-                      <div className="text-sm text-slate-400">老师正在准备，敬请期待</div>
-                    ) : (
-                      <>
-                        <div className="mb-1 flex justify-between text-xs text-slate-500">
-                          <span>已完成 {done}/{items.length} 课</span>
-                          <span>{pct}%</span>
-                        </div>
-                        <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                          <div className={`h-full rounded-full ${pct === 100 ? "bg-emerald-500" : "bg-brand-500"}`} style={{ width: `${pct}%` }} />
-                        </div>
-                      </>
-                    )}
+                  <CourseCard title={c.title} description={c.description} index={i}>
+                    <div className="mb-1 flex justify-between text-xs text-slate-500">
+                      <span>已完成 {done}/{items.length} 课</span>
+                      <span>{pct}%</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                      <div className={`h-full rounded-full ${pct === 100 ? "bg-emerald-500" : "bg-brand-500"}`} style={{ width: `${pct}%` }} />
+                    </div>
                   </CourseCard>
                 </Link>
               );

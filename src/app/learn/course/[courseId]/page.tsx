@@ -54,56 +54,50 @@ export default async function LearnCoursePage({ params }: { params: Promise<{ co
         </div>
       </div>
 
-      {items.length === 0 ? (
-        <div className="card p-10 text-center text-slate-400">老师还没有开放这门课的内容</div>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="text-sm text-slate-500">
-              共 {items.length} 课，已完成 <b className="text-slate-700">{lessonsDone}</b> 课
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="text-sm text-slate-500">
+          共 {items.length} 课，已完成 <b className="text-slate-700">{lessonsDone}</b> 课
+        </div>
+        <div className="ml-auto hidden items-center gap-3 text-xs text-slate-500 sm:flex">
+          <span className="inline-flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm border border-emerald-300 bg-emerald-100" />已完成</span>
+          <span className="inline-flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm border border-amber-300 bg-amber-100" />学习中</span>
+          <span className="inline-flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm border border-slate-300 bg-white" />未开始</span>
+        </div>
+        {grouped && <ExpandAll />}
+      </div>
+      <div className="space-y-3">
+        {groups.map((g, gi) => {
+          const grid = (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {g.items.map(({ item, index }) => (
+                <LessonTile key={item.lesson.id} t={item.tile} fallbackNo={`第${index + 1}课`} />
+              ))}
             </div>
-            <div className="ml-auto hidden items-center gap-3 text-xs text-slate-500 sm:flex">
-              <span className="inline-flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm border border-emerald-300 bg-emerald-100" />已完成</span>
-              <span className="inline-flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm border border-amber-300 bg-amber-100" />学习中</span>
-              <span className="inline-flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm border border-slate-300 bg-white" />未开始</span>
-            </div>
-            {grouped && <ExpandAll />}
-          </div>
-          <div className="space-y-3">
-            {groups.map((g, gi) => {
-              const grid = (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                  {g.items.map(({ item, index }) => (
-                    <LessonTile key={item.lesson.id} t={item.tile} fallbackNo={`第${index + 1}课`} />
-                  ))}
-                </div>
-              );
-              if (!g.section)
-                return (
-                  <div key={gi} className="space-y-2">
-                    {grouped && <div className="py-1 font-bold text-slate-700">其他课时</div>}
-                    {grid}
-                  </div>
-                );
-              const gDone = g.items.filter((x) => x.item.pct === 100).length;
-              const gPct = Math.round((gDone / g.items.length) * 100);
-              return (
-                <details key={gi} data-section open={gi === openIdx} className="group/sec card px-4 py-3 sm:px-5">
-                  <summary className="flex cursor-pointer list-none items-center gap-3 select-none">
-                    <span className="text-xs text-slate-400 transition group-open/sec:rotate-90">▶</span>
-                    <span className="min-w-0 flex-1 truncate font-bold text-slate-800">{g.section}</span>
-                    <span className="hidden h-1.5 w-24 overflow-hidden rounded-full bg-slate-100 sm:block">
-                      <span className={`block h-full rounded-full ${gPct === 100 ? "bg-emerald-500" : "bg-brand-500"}`} style={{ width: `${gPct}%` }} />
-                    </span>
-                    <span className="shrink-0 text-sm text-slate-400">{gDone}/{g.items.length} 课</span>
-                  </summary>
-                  <div className="pt-3">{grid}</div>
-                </details>
-              );
-            })}
-          </div>
-        </>
-      )}
+          );
+          if (!g.section)
+            return (
+              <div key={gi} className="space-y-2">
+                {grouped && <div className="py-1 font-bold text-slate-700">其他课时</div>}
+                {grid}
+              </div>
+            );
+          const gDone = g.items.filter((x) => x.item.pct === 100).length;
+          const gPct = Math.round((gDone / g.items.length) * 100);
+          return (
+            <details key={gi} data-section open={gi === openIdx} className="group/sec card px-4 py-3 sm:px-5">
+              <summary className="flex cursor-pointer list-none items-center gap-3 select-none">
+                <span className="text-xs text-slate-400 transition group-open/sec:rotate-90">▶</span>
+                <span className="min-w-0 flex-1 truncate font-bold text-slate-800">{g.section}</span>
+                <span className="hidden h-1.5 w-24 overflow-hidden rounded-full bg-slate-100 sm:block">
+                  <span className={`block h-full rounded-full ${gPct === 100 ? "bg-emerald-500" : "bg-brand-500"}`} style={{ width: `${gPct}%` }} />
+                </span>
+                <span className="shrink-0 text-sm text-slate-400">{gDone}/{g.items.length} 课</span>
+              </summary>
+              <div className="pt-3">{grid}</div>
+            </details>
+          );
+        })}
+      </div>
     </div>
   );
 }
