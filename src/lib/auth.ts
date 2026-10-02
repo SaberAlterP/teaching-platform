@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db, schema } from "@/db";
+import { THEME_COOKIE, isTheme } from "./themes";
 import { SESSION_COOKIE, cookieOptions, signSession, verifySession, type SessionPayload } from "./session";
 
 export async function getSession(): Promise<SessionPayload | null> {
@@ -53,11 +54,18 @@ export async function startSession(user: schema.User) {
     name: user.name,
     mcp: mustChangeNow(user),
   });
-  (await cookies()).set(SESSION_COOKIE, token, cookieOptions);
+  const c = await cookies();
+  c.set(SESSION_COOKIE, token, cookieOptions);
+  // 主题跟着老师账号走：登录时写入 Cookie（页面据此换色，登录页也有同样的外观），学生没有
+  if (user.role === "TEACHER" && user.theme && isTheme(user.theme))
+    c.set(THEME_COOKIE, user.theme, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
+  else c.delete(THEME_COOKIE);
 }
 
 export async function endSession() {
-  (await cookies()).delete(SESSION_COOKIE);
+  const c = await cookies();
+  c.delete(SESSION_COOKIE);
+  c.delete(THEME_COOKIE);
 }
 
 export const hashPassword = (pw: string) => bcrypt.hash(pw, 10);

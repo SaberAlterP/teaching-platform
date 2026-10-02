@@ -47,7 +47,7 @@ export async function loadTeacherOverview() {
     db
       .select({
         id: schema.users.id, name: schema.users.name, username: schema.users.username,
-        isAdmin: schema.users.isAdmin, createdAt: schema.users.createdAt, lastLoginAt: schema.users.lastLoginAt,
+        isAdmin: schema.users.isAdmin, email: schema.users.email, approved: schema.users.approved, createdAt: schema.users.createdAt, lastLoginAt: schema.users.lastLoginAt,
       })
       .from(schema.users)
       .where(eq(schema.users.role, "TEACHER"))
