@@ -5,9 +5,7 @@ import { requireTeacher } from "@/lib/auth";
 import { assertLessonOwner, getTeacherCourse } from "@/lib/course";
 import { isRunning, sealDangling, startRun, stopChat, type StoredMessage } from "@/lib/ai/agent";
 import { ownChat } from "@/lib/ai/chats";
-import { streamChat } from "@/lib/ai/deepseek";
 import { takeAttachment } from "@/lib/ai/extract";
-import { getAiSettings, saveAiSettings } from "@/lib/ai/settings";
 import { deleteSkill, saveSkill } from "@/lib/ai/skills";
 import { undoChange } from "@/lib/ai/undo";
 import { removeChatDir } from "@/lib/ai/workspace";
@@ -121,33 +119,6 @@ export async function renameChat(chatId: string, title: string) {
   const t = await requireTeacher();
   const c = await ownChat(t.id, chatId);
   await db.update(schema.aiChats).set({ title: title.trim().slice(0, 40) || c.title }).where(eq(schema.aiChats.id, c.id));
-}
-
-// ---- 设置 ----
-export async function saveSettings(input: { apiKey?: string; model: string; baseUrl: string; thinking: boolean }): Promise<Result> {
-  try {
-    const t = await requireTeacher();
-    await saveAiSettings(t.id, input);
-    return {};
-  } catch (e) {
-    return fail(e);
-  }
-}
-
-export async function testSettings(): Promise<Result<{ reply: string; model: string }>> {
-  try {
-    const t = await requireTeacher();
-    const s = await getAiSettings(t.id);
-    if (!s.apiKey) return { error: "还没有填写密钥" };
-    const r = await streamChat({
-      baseUrl: s.baseUrl, apiKey: s.apiKey, model: s.model, thinking: false, maxTokens: 20,
-      messages: [{ role: "user", content: "只回复两个字：你好" }],
-      signal: AbortSignal.timeout(30_000),
-    });
-    return { reply: r.content.trim() || "（收到空回复）", model: s.model };
-  } catch (e) {
-    return fail(e);
-  }
 }
 
 // ---- 技能 ----

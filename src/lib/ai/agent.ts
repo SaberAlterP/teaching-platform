@@ -2,7 +2,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { AiError, streamChat, type ApiMessage, type ToolCall } from "./deepseek";
-import { getAiSettings } from "./settings";
+import { getAiSettings, recordAiUsage } from "./settings";
 import { listSkills } from "./skills";
 import { parseArgs, runTool, toolConfirm, TOOL_DEFS, type PreviewReport, type ToolCtx } from "./tools";
 
@@ -210,7 +210,7 @@ async function run(chatId: string, job: Job) {
     acquired = true;
     const chat = await db.query.aiChats.findFirst({ where: eq(schema.aiChats.id, chatId) });
     if (!chat) return;
-    const settings = await getAiSettings(chat.teacherId);
+    const settings = await getAiSettings();
     if (!settings.apiKey) throw new AiError("还没有填写 DeepSeek 密钥，请先到“设置”里填写");
     await save(chatId, { status: "running" });
     const messages = chat.messages as StoredMessage[];
@@ -307,6 +307,7 @@ async function run(chatId: string, job: Job) {
       usage.completion = (usage.completion ?? 0) + (u.completion_tokens ?? 0);
       usage.cached = (usage.cached ?? 0) + (u.prompt_cache_hit_tokens ?? 0);
       usage.requests = (usage.requests ?? 0) + 1;
+      await recordAiUsage(chat.teacherId, chatId, settings.model, u).catch(() => {});
       await save(chatId, { messages, usage });
       if (step === MAX_STEPS - 1)
         await save(chatId, { error: "已达到单次运行的步数上限，点“继续”接着做" });

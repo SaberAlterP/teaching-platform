@@ -15,7 +15,7 @@ export default async function AssistantPage({ searchParams }: { searchParams: Pr
       .where(eq(schema.aiChats.teacherId, t.id))
       .orderBy(desc(schema.aiChats.updatedAt))
       .limit(100),
-    getAiSettings(t.id),
+    getAiSettings(),
   ]);
   const current = sp.c && chats.some((c) => c.id === sp.c) ? sp.c : null;
   // 从课时编辑页进来：新对话默认针对这个课时

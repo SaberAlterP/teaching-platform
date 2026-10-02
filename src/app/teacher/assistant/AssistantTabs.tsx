@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 const TABS = [
   { href: "/teacher/assistant", label: "对话" },
   { href: "/teacher/assistant/skills", label: "技能" },
-  { href: "/teacher/assistant/settings", label: "设置" },
 ];
 
 export function AssistantTabs({ right }: { right?: React.ReactNode }) {

@@ -19,6 +19,7 @@ export default async function TeacherLayout({ children }: { children: React.Reac
       <TopNav
         name={t.name}
         role="TEACHER"
+        admin={t.isAdmin}
         switcher={<CourseSwitcher current={course.id} courses={courses.map((c) => ({ id: c.id, title: c.title }))} />}
         links={[
           { href: "/teacher", label: "我的课程" },
@@ -27,6 +28,7 @@ export default async function TeacherLayout({ children }: { children: React.Reac
           { href: "/teacher/stats", label: "成绩统计" },
           { href: "/teacher/assistant", label: "AI 助手" },
           { href: "/teacher/ai", label: "AI 接口" },
+          ...(t.isAdmin ? [{ href: "/admin", label: "管理" }] : []),
         ]}
       />
       <main className="mx-auto max-w-7xl px-4 py-6 has-[.lesson-full]:max-w-none">{children}</main>
