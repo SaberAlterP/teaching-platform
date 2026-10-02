@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Markdown } from "@/components/Markdown";
 import { decide, resumeRun, sendMessage, stopRun, undo } from "./actions";
@@ -199,7 +198,7 @@ export function ChatBody({
       >
         {!hasKey && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            还没有填写 DeepSeek 密钥。<Link href="/teacher/assistant/settings" className="font-medium underline">去设置</Link>
+            管理员还没有配置 DeepSeek 密钥，AI 暂时不能用，请联系管理员。
           </div>
         )}
         {!chatId && !items.length && <Welcome lesson={lesson} compact={compact} onPick={(s) => setText(s)} />}

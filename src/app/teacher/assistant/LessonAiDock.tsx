@@ -13,7 +13,7 @@ export async function LessonAiDock({ teacherId, lesson }: { teacherId: string; l
       .where(and(eq(c.teacherId, teacherId), eq(c.lessonId, lesson.id)))
       .orderBy(desc(c.updatedAt))
       .limit(30),
-    getAiSettings(teacherId),
+    getAiSettings(),
   ]);
   return (
     <AiDock
