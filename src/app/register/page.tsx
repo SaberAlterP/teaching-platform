@@ -2,6 +2,8 @@ import Link from "next/link";
 import { getSignupMode } from "@/lib/site";
 import { RegisterForm } from "./RegisterForm";
 
+export const metadata = { title: "老师注册" };
+
 export default async function RegisterPage() {
   const mode = await getSignupMode();
   return (

@@ -1,11 +1,14 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Markdown } from "@/components/Markdown";
 import { MODULE_LABELS, type HtmlData, type MediaData, type ModuleType, type QuizData, type RichTextData } from "@/lib/modules";
 import { markComplete, reportHtmlScore, submitQuiz, type QuizResult } from "@/app/learn/actions";
 import { MediaView } from "./MediaView";
 import { QuizView } from "./QuizView";
 import { HtmlFrame } from "./HtmlFrame";
+import { Celebration, cheerForScore, type Cheer } from "./Celebration";
+import { EmptyState } from "@/components/EmptyState";
+import { splitTitle } from "@/lib/sections";
 
 export type ViewModule = {
   id: string;
@@ -19,6 +22,7 @@ export type ViewModule = {
 export function LessonView({
   title,
   summary,
+  courseTitle,
   modules,
   completed: initialCompleted,
   results,
@@ -28,6 +32,7 @@ export function LessonView({
 }: {
   title: string;
   summary: string;
+  courseTitle?: string;
   modules: ViewModule[];
   completed: string[];
   results: Record<string, QuizResult>;
@@ -38,21 +43,47 @@ export function LessonView({
   const [completed, setCompleted] = useState(new Set(initialCompleted));
   const [scores, setScores] = useState(htmlScores);
   const [active, setActive] = useState(modules[0]?.id);
+  const [cheer, setCheer] = useState<Cheer | null>(null);
+  const cheerSeq = useRef(0);
+  const cheerUp = (c: (id: number) => Cheer) => setCheer(c(++cheerSeq.current));
+  const closeCheer = useCallback(() => setCheer(null), []);
   const done = (id: string) => {
     if (completed.has(id)) return;
     setCompleted((s) => new Set(s).add(id));
+    if (completed.size + 1 === modules.length) setTimeout(() => cheerUp((n) => ({ id: n, icon: "🎉", title: "本课全部完成！", sub: "获得「完成」徽章" })), 600);
     if (!preview) markComplete(id).catch(() => {});
   };
 
   const pct = modules.length ? Math.round((completed.size / modules.length) * 100) : 0;
 
   const activeIndex = Math.max(0, modules.findIndex((m) => m.id === active));
+  const { no: lessonNo, name } = splitTitle(title);
 
   return (
     <div className="lesson-full mx-auto max-w-[1800px]">
-      <header className="mb-4">
-        <h1 className="text-2xl font-bold sm:text-3xl">{title}</h1>
-        {summary && <p className="mt-1.5 text-slate-500">{summary}</p>}
+      <header className="relative mb-4 overflow-hidden rounded-2xl bg-linear-to-br from-brand-500 to-indigo-500 p-5 text-white shadow-sm sm:p-7">
+        <span className="pointer-events-none absolute -right-3 -bottom-10 text-[9rem] leading-none font-black text-white/10 select-none" aria-hidden>{lessonNo || name.slice(0, 1)}</span>
+        <div className="relative flex flex-wrap items-end gap-x-8 gap-y-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-white/80">
+              {courseTitle && <span>{courseTitle}</span>}
+              {lessonNo && <span className="rounded-md bg-white/20 px-2 py-0.5 font-medium">第 {lessonNo} 课</span>}
+            </div>
+            <h1 className="mt-1.5 text-2xl font-bold sm:text-3xl">{name}</h1>
+            {summary && <p className="mt-1.5 text-white/85">{summary}</p>}
+          </div>
+          {modules.length > 0 && (
+            <div className="w-full shrink-0 sm:w-56">
+              <div className="mb-1 flex justify-between text-sm text-white/85">
+                <span>已完成 {completed.size}/{modules.length} 个环节</span>
+                <span>{pct}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-white/25">
+                <div className="h-full rounded-full bg-white transition-all duration-700" style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+          )}
+        </div>
       </header>
 
       {modules.length > 0 && (
@@ -82,7 +113,10 @@ export function LessonView({
                 preview={preview}
                 onSubmit={async (a) => {
                   const r = await submitQuiz(m.id, a);
-                  if (!r.error) done(m.id);
+                  if (!r.error) {
+                    done(m.id);
+                    if (!r.needsGrading && r.maxScore > 0) cheerUp((n) => cheerForScore(r.score, r.maxScore, m.title || "习题", n));
+                  }
                   return r;
                 }}
               />
@@ -96,6 +130,7 @@ export function LessonView({
                   const max = d.maxScore ?? 100;
                   const v = Math.max(0, Math.min(max, s));
                   setScores((prev) => ({ ...prev, [m.id]: { score: Math.max(prev[m.id]?.score ?? 0, v), maxScore: max } }));
+                  if (d.scored) cheerUp((n) => cheerForScore(v, max, m.title || "互动练习", n));
                 }}
                 onDone={() => done(m.id)}
                 preview={preview}
@@ -104,14 +139,15 @@ export function LessonView({
           </Section>
         ))}
 
-        {modules.length === 0 && <div className="card p-10 text-center text-slate-400">这节课还没有内容</div>}
+        {modules.length === 0 && <EmptyState title="这节课还没有内容" hint="老师添加内容后会显示在这里" />}
         {modules.length > 0 && (
           <div className="flex flex-col items-center gap-3 py-8 text-center text-sm text-slate-500">
-            {pct === 100 ? "🎉 本课内容已全部完成" : `— 本课结束，已完成 ${completed.size}/${modules.length} 个环节 —`}
+            {pct === 100 ? <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 font-medium text-emerald-700">🏅 本课内容已全部完成</span> : `— 本课结束，已完成 ${completed.size}/${modules.length} 个环节 —`}
             {backHref && <a href={backHref} className="btn-outline">返回课程列表</a>}
           </div>
         )}
       </div>
+      <Celebration cheer={cheer} onClose={closeCheer} />
     </div>
   );
 }
@@ -139,7 +175,7 @@ function ProgressBar({
   const cur = modules[activeIndex];
 
   return (
-    <div ref={box} className="sticky top-14 z-20 -mx-4 border-b border-slate-200 bg-[#f5f7fb]/90 px-4 backdrop-blur">
+    <div ref={box} className="sticky top-14 z-20 -mx-4 border-b border-slate-200 px-4 backdrop-blur" style={{ background: "color-mix(in srgb, var(--tp-bg, #f5f7fb) 90%, transparent)" }}>
       <div className="flex h-11 items-center gap-3 text-sm">
         <button
           type="button"

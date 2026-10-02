@@ -22,7 +22,7 @@ export async function loadLearnData(userId: string) {
       : [],
     ids.length
       ? db
-          .select({ id: schema.moduleProgress.moduleId })
+          .select({ id: schema.moduleProgress.moduleId, lessonId: schema.modules.lessonId, at: schema.moduleProgress.completedAt })
           .from(schema.moduleProgress)
           .innerJoin(schema.modules, eq(schema.modules.id, schema.moduleProgress.moduleId))
           .where(and(eq(schema.moduleProgress.userId, userId), inArray(schema.modules.lessonId, ids)))
@@ -36,7 +36,7 @@ export async function loadLearnData(userId: string) {
       : [],
     ids.length
       ? db
-          .select({ moduleId: schema.submissions.moduleId, score: schema.submissions.score })
+          .select({ moduleId: schema.submissions.moduleId, score: schema.submissions.score, lessonId: schema.modules.lessonId, at: schema.submissions.updatedAt })
           .from(schema.submissions)
           .innerJoin(schema.modules, eq(schema.modules.id, schema.submissions.moduleId))
           .where(and(eq(schema.submissions.userId, userId), inArray(schema.modules.lessonId, ids)))
@@ -57,6 +57,9 @@ export async function loadLearnData(userId: string) {
   // 按课程排列，这样“继续学习”先走完第一门课
   const courseRank = new Map(courses.map((c, i) => [c.id, i]));
   const ordered = [...lessons].sort((a, b) => (courseRank.get(a.courseId) ?? 0) - (courseRank.get(b.courseId) ?? 0));
+  // 每个课时最近一次学习时间（学完一个环节或提交成绩），用于“最近在学”
+  const lastAt = new Map<string, number>();
+  for (const r of [...done, ...subs]) lastAt.set(r.lessonId, Math.max(lastAt.get(r.lessonId) ?? 0, r.at.getTime()));
   const stats = ordered.map((l) => {
     const lm = mods.filter((m) => m.lessonId === l.id);
     const d = lm.filter((m) => doneSet.has(m.id)).length;
@@ -75,12 +78,24 @@ export async function loadLearnData(userId: string) {
       score: got.length ? got.reduce((a, m) => a + (subScore.get(m.id) ?? 0), 0) : null,
       maxScore: sm.reduce((a, m) => a + m.max, 0),
     };
-    return { lesson: l, tile, pct: tile.pct };
+    return { lesson: l, tile, pct: tile.pct, lastAt: lastAt.get(l.id) ?? 0 };
   });
   const lessonsDone = stats.filter((s) => s.pct === 100).length;
   const allDone = stats.reduce((a, s) => a + s.tile.done, 0);
   const allTotal = stats.reduce((a, s) => a + s.tile.total, 0);
   const overall = allTotal ? Math.round((allDone / allTotal) * 100) : 0;
   const next = stats.find((s) => s.pct < 100);
-  return { courses, stats, lessonsDone, overall, next };
+  // 累计得分率、连续学习天数（按北京时间的日期算，今天还没学也不断，从昨天往前数）
+  const got = stats.reduce((a, s) => a + (s.tile.score ?? 0), 0);
+  const max = stats.filter((s) => s.tile.score !== null).reduce((a, s) => a + s.tile.maxScore, 0);
+  const day = (t: number) => new Date(t + 8 * 3600_000).toISOString().slice(0, 10);
+  const days = new Set([...done, ...subs].map((r) => day(r.at.getTime())));
+  let streak = 0;
+  const now = Date.now();
+  for (let t = now; ; t -= 86400_000) {
+    if (days.has(day(t))) streak++;
+    else if (t < now) break;
+  }
+  const recent = stats.filter((s) => s.lastAt).sort((a, b) => b.lastAt - a.lastAt).slice(0, 4);
+  return { courses, stats, lessonsDone, overall, next, recent, scoreRate: max ? Math.round((got / max) * 100) : null, streak };
 }

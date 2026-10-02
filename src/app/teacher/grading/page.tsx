@@ -5,6 +5,8 @@ import { getTeacherCourse } from "@/lib/course";
 import type { QuizData } from "@/lib/modules";
 import { GradeItem } from "./GradeItem";
 
+export const metadata = { title: "批改" };
+
 export default async function GradingPage({ searchParams }: { searchParams: Promise<{ all?: string }> }) {
   const t = await requireTeacher();
   const { course } = await getTeacherCourse(t.id);

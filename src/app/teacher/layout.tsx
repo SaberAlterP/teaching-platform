@@ -3,7 +3,7 @@ import { db, schema } from "@/db";
 import { requireTeacher } from "@/lib/auth";
 import { getTeacherCourse } from "@/lib/course";
 import { TopNav } from "@/components/TopNav";
-import { ThemePicker } from "./ThemePicker";
+import { ThemePicker } from "@/components/ThemePicker";
 import { CourseSwitcher } from "./CourseSwitcher";
 
 export default async function TeacherLayout({ children }: { children: React.ReactNode }) {

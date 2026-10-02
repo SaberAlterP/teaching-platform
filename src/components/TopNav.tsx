@@ -25,7 +25,7 @@ export function TopNav({
           <span className="hidden sm:inline">教学实训平台</span>
         </Link>
         {switcher}
-        <NavLinks links={links} />
+        <div className={`min-w-0 ${role === "STUDENT" ? "hidden sm:block" : ""}`}><NavLinks links={links} /></div>
         <div className="ml-auto flex shrink-0 items-center gap-1 text-sm">
           <span className="mr-2 hidden text-slate-500 sm:inline">
             {name}
