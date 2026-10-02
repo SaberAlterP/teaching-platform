@@ -5,6 +5,7 @@ import { db, schema } from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { getAiSettings, saveAiSettings } from "@/lib/ai/settings";
 import { streamChat } from "@/lib/ai/deepseek";
+import { setSignupMode, type SignupMode } from "@/lib/site";
 
 type Result<T = object> = ({ error?: undefined } & T) | { error: string };
 const fail = (e: unknown) => ({ error: (e as Error).message || "出错了" });
@@ -49,6 +50,33 @@ export async function setAdmin(teacherId: string, isAdmin: boolean): Promise<Res
       .update(schema.users)
       .set({ isAdmin })
       .where(and(eq(schema.users.id, teacherId), eq(schema.users.role, "TEACHER")));
+    revalidatePath("/admin/teachers");
+    return {};
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// 批准待审核的老师（拒绝 = 删除这个还没用过的账号）
+export async function reviewTeacher(id: string, approve: boolean): Promise<Result> {
+  try {
+    await requireAdmin();
+    const where = and(eq(schema.users.id, id), eq(schema.users.role, "TEACHER"), eq(schema.users.approved, false));
+    if (approve) await db.update(schema.users).set({ approved: true }).where(where);
+    else await db.delete(schema.users).where(where);
+    revalidatePath("/admin/teachers");
+    revalidatePath("/admin", "layout");
+    return {};
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function saveSignupMode(mode: SignupMode): Promise<Result> {
+  try {
+    await requireAdmin();
+    if (!["approval", "open", "closed"].includes(mode)) return { error: "无效的选项" };
+    await setSignupMode(mode);
     revalidatePath("/admin/teachers");
     return {};
   } catch (e) {

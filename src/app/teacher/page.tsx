@@ -6,11 +6,18 @@ import { CourseCard } from "@/components/CourseCard";
 import { openCourse } from "./actions";
 import { PendingButton } from "@/components/PendingButton";
 import { NewCourseTile } from "./NewCourseTile";
+import { HomeComposer } from "./HomeComposer";
+import { getAiSettings } from "@/lib/ai/settings";
+
+function greeting() {
+  const h = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Shanghai", hour: "2-digit", hour12: false })) % 24;
+  return h < 5 ? "夜深了" : h < 11 ? "早上好" : h < 13 ? "中午好" : h < 18 ? "下午好" : "晚上好";
+}
 
 // 教师首页：我教的课程，每门课一个方块，点进去是这门课的课时
 export default async function TeacherHome() {
   const t = await requireTeacher();
-  const { courses } = await getTeacherCourse(t.id);
+  const [{ courses }, ai] = await Promise.all([getTeacherCourse(t.id), getAiSettings()]);
   const ids = courses.map((c) => c.id);
   const lessonRows = await db
     .select({ courseId: schema.lessons.courseId, status: schema.lessons.status, n: count() })
@@ -35,9 +42,21 @@ export default async function TeacherHome() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-50 via-white to-brand-100 px-4 py-10 sm:py-14">
+        <div className="pointer-events-none absolute -top-16 -left-10 h-56 w-56 rounded-full bg-brand-100 opacity-70 blur-3xl" />
+        <div className="pointer-events-none absolute -right-10 -bottom-20 h-64 w-64 rounded-full bg-brand-100 opacity-70 blur-3xl" />
+        <div className="relative mb-7 text-center">
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            {greeting()}，<span className="text-brand-600">{t.name}</span>
+          </h1>
+          <p className="mt-2 text-lg text-slate-500">接下来想做点什么？</p>
+        </div>
+        <div className="relative"><HomeComposer hasKey={ai.hasKey} isAdmin={t.isAdmin} /></div>
+      </section>
+      <section className="space-y-5">
       <div className="flex items-end gap-3">
-        <h1 className="text-2xl font-bold">我的课程</h1>
+        <h2 className="text-2xl font-bold">我的课程</h2>
         <span className="pb-0.5 text-slate-500">共 {courses.length} 门</span>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -65,6 +84,7 @@ export default async function TeacherHome() {
         })}
         <NewCourseTile />
       </div>
+      </section>
     </div>
   );
 }
