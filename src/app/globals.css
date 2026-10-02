@@ -10,9 +10,47 @@
 }
 
 body {
-  background: #f5f7fb;
-  color: #1c2433;
+  background: var(--tp-bg, #f5f7fb);
+  color: var(--tp-text, #1c2433);
 }
+
+/* ---- 教师工作台主题：只换变量，按钮和方块颜色都跟着变 ---- */
+[data-theme="teal"] {
+  --color-brand-50: #e9faf6; --color-brand-100: #c8f0e6; --color-brand-500: #0d9488; --color-brand-600: #0b7f75; --color-brand-700: #0a665e;
+  --tp-bg: #f2f9f8;
+}
+[data-theme="violet"] {
+  --color-brand-50: #f3eeff; --color-brand-100: #e4d9ff; --color-brand-500: #7c3aed; --color-brand-600: #6928d6; --color-brand-700: #5521ab;
+  --tp-bg: #f7f5fd;
+}
+[data-theme="sunset"] {
+  --color-brand-50: #fff3ea; --color-brand-100: #ffe0c9; --color-brand-500: #ea580c; --color-brand-600: #c9480a; --color-brand-700: #9f3a0a;
+  --tp-bg: #fdf8f3;
+}
+[data-theme="rose"] {
+  --color-brand-50: #fff0f3; --color-brand-100: #ffd9e1; --color-brand-500: #e11d48; --color-brand-600: #c4153c; --color-brand-700: #9b1231;
+  --tp-bg: #fdf5f6;
+}
+/* 夜间：把白色和灰阶整体翻转，白底变深色面板，深灰字变浅 */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --tp-bg: #0f1420; --tp-text: #e6eaf3;
+  --color-white: #1a2132;
+  --color-slate-50: #1f2739; --color-slate-100: #263046; --color-slate-200: #323d57; --color-slate-300: #424f6d;
+  --color-slate-400: #7d8aa6; --color-slate-500: #98a4bd; --color-slate-600: #b4bed2; --color-slate-700: #ccd4e4;
+  --color-slate-800: #dde3ef; --color-slate-900: #eef1f7;
+  --color-brand-50: #1d2c4d; --color-brand-100: #263a66; --color-brand-500: #4f84f5; --color-brand-600: #6c9bff; --color-brand-700: #9ab9ff;
+  --color-red-50: #3a1d24; --color-red-600: #ff8090; --color-emerald-50: #15332a; --color-emerald-700: #5fdca8;
+  --color-amber-50: #3a2f17; --color-amber-700: #f0c060; --color-sky-50: #15303f;
+}
+/* 夜间模式下纯白文字（按钮、渐变方块上的字）要保持白色 */
+[data-theme="dark"] .text-white { color: #fff; }
+[data-theme="dark"] .btn-primary { color: #fff; }
+[data-theme="dark"] .prose-tp blockquote { background: #1f2a44; border-color: #3a4d7a; color: #b4bed2; }
+[data-theme="dark"] .prose-tp code { background: #263046; }
+[data-theme="dark"] .prose-tp th { background: #263046; }
+[data-theme="dark"] .prose-tp th, [data-theme="dark"] .prose-tp td { border-color: #323d57; }
+[data-theme="dark"] .prose-tp a { color: #6c9bff; }
 
 @layer components {
   .btn, .btn-primary, .btn-ghost, .btn-outline, .btn-danger {
@@ -47,7 +85,7 @@ body {
 .prose-tp th { background: #f3f6fa; font-weight: 600; }
 .prose-tp img { max-width: 100%; max-height: 70vh; border-radius: 8px; }
 .prose-tp td > p, .prose-tp th > p { margin: 0; }
-.prose-tp a { color: #2f6fed; text-decoration: underline; }
+.prose-tp a { color: var(--color-brand-500); text-decoration: underline; }
 .prose-tp > :first-child { margin-top: 0; }
 
 /* 图文编辑器 */

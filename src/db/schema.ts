@@ -26,6 +26,10 @@ export const users = pgTable("users", {
   mustChangePassword: boolean("must_change_password").notNull().default(true),
   // 管理员是叠加在角色上的标记：老师可以同时是管理员，管理员负责全站 AI 设置并查看各老师用量
   isAdmin: boolean("is_admin").notNull().default(false),
+  email: text("email").unique(), // 自助注册的老师填写，可用邮箱登录
+  // 自助注册的老师默认待批准（approved=false）；已有账号和管理员创建的账号都是 true
+  approved: boolean("approved").notNull().default(true),
+  theme: text("theme").notNull().default(""), // 教师工作台主题，空 = 默认
   createdAt: createdAt(),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
 });
@@ -166,6 +170,13 @@ export const aiGlobalSettings = pgTable("ai_global_settings", {
   model: text("model").notNull().default("deepseek-flash"),
   baseUrl: text("base_url").notNull().default("https://api.deepseek.com"),
   thinking: boolean("thinking").notNull().default(true),
+  updatedAt: updatedAt(),
+});
+
+// 全站设置（单行）：老师自助注册的开放方式 approval 需批准 / open 直接开通 / closed 关闭
+export const siteSettings = pgTable("site_settings", {
+  id: text("id").primaryKey().default("global"),
+  teacherSignup: text("teacher_signup").notNull().default("approval"),
   updatedAt: updatedAt(),
 });
 

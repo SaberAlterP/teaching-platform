@@ -8,6 +8,7 @@ import { hashPassword, requireTeacher } from "@/lib/auth";
 import { COURSE_COOKIE, assertLessonOwner, assertModuleOwner, createCourse, getTeacherCourse, listTeacherCourses } from "@/lib/course";
 import { defaultData, type ModuleType, type QuizData } from "@/lib/modules";
 import { createApiKey } from "@/lib/api-key";
+import { THEME_COOKIE, isTheme } from "@/lib/themes";
 import { cleanupFiles, regradeSubmissions, validateQuiz, writeOrder } from "@/lib/content";
 
 // ---------------- 课程 ----------------
@@ -384,4 +385,14 @@ export async function revokeApiKey(id: string) {
   const t = await requireTeacher();
   await db.delete(schema.apiKeys).where(and(eq(schema.apiKeys.id, id), eq(schema.apiKeys.teacherId, t.id)));
   revalidatePath("/teacher/ai");
+}
+
+// ---------------- 主题 ----------------
+export async function setTheme(theme: string) {
+  const t = await requireTeacher();
+  if (!isTheme(theme)) return;
+  await db.update(schema.users).set({ theme }).where(eq(schema.users.id, t.id));
+  const c = await cookies();
+  if (theme) c.set(THEME_COOKIE, theme, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
+  else c.delete(THEME_COOKIE);
 }

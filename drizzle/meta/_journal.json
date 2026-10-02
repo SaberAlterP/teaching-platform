@@ -43,6 +43,13 @@
       "when": 1790958171620,
       "tag": "0005_admin_role",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790958926760,
+      "tag": "0006_teacher_signup_theme",
+      "breakpoints": true
     }
   ]
 }
