@@ -4,6 +4,8 @@ import { requireTeacher } from "@/lib/auth";
 import { getTeacherCourse } from "@/lib/course";
 import { StudentsClient } from "./StudentsClient";
 
+export const metadata = { title: "学生" };
+
 export default async function StudentsPage() {
   const t = await requireTeacher();
   const { course, cls } = await getTeacherCourse(t.id);

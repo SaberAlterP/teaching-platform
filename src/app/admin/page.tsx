@@ -6,6 +6,8 @@ const num = (n: number) => n.toLocaleString("zh-CN");
 const tok = (n: number) => (n >= 10000 ? `${(n / 10000).toFixed(1)} 万` : String(n));
 const fmt = (d: Date | null) => (d ? new Date(d).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }) : "—");
 
+export const metadata = { title: "管理" };
+
 export default async function UsagePage({ searchParams }: { searchParams: Promise<{ d?: string }> }) {
   const sp = await searchParams;
   const days = RANGES.some((r) => String(r.d) === sp.d) ? Number(sp.d) : 30;
