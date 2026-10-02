@@ -7,17 +7,16 @@ import { openCourse } from "./actions";
 import { PendingButton } from "@/components/PendingButton";
 import { NewCourseTile } from "./NewCourseTile";
 import { HomeComposer } from "./HomeComposer";
+import { greeting } from "@/lib/greeting";
+import { Dashboard } from "./Dashboard";
 import { getAiSettings } from "@/lib/ai/settings";
 
-function greeting() {
-  const h = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Shanghai", hour: "2-digit", hour12: false })) % 24;
-  return h < 5 ? "夜深了" : h < 11 ? "早上好" : h < 13 ? "中午好" : h < 18 ? "下午好" : "晚上好";
-}
-
 // 教师首页：我教的课程，每门课一个方块，点进去是这门课的课时
+export const metadata = { title: "我的课程" };
+
 export default async function TeacherHome() {
   const t = await requireTeacher();
-  const [{ courses }, ai] = await Promise.all([getTeacherCourse(t.id), getAiSettings()]);
+  const [{ course, cls, courses }, ai] = await Promise.all([getTeacherCourse(t.id), getAiSettings()]);
   const ids = courses.map((c) => c.id);
   const lessonRows = await db
     .select({ courseId: schema.lessons.courseId, status: schema.lessons.status, n: count() })
@@ -54,6 +53,7 @@ export default async function TeacherHome() {
         </div>
         <div className="relative"><HomeComposer hasKey={ai.hasKey} isAdmin={t.isAdmin} /></div>
       </section>
+      <Dashboard courseId={course.id} courseTitle={course.title} classId={cls.id} />
       <section className="space-y-5">
       <div className="flex items-end gap-3">
         <h2 className="text-2xl font-bold">我的课程</h2>

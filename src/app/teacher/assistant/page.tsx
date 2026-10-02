@@ -5,6 +5,8 @@ import { getAiSettings } from "@/lib/ai/settings";
 import { AssistantTabs } from "./AssistantTabs";
 import { ChatClient } from "./ChatClient";
 
+export const metadata = { title: "AI 助手" };
+
 export default async function AssistantPage({ searchParams }: { searchParams: Promise<{ c?: string; lesson?: string }> }) {
   const t = await requireTeacher();
   const sp = await searchParams;

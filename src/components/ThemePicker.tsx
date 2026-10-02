@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { THEMES } from "@/lib/themes";
-import { setTheme } from "./actions";
+import { setTheme } from "@/app/account/theme";
 
 export function ThemePicker({ current }: { current: string }) {
   const [open, setOpen] = useState(false);
@@ -31,7 +31,7 @@ export function ThemePicker({ current }: { current: string }) {
       </button>
       {open && (
         <div className="card absolute right-0 z-50 mt-2 w-56 p-3 shadow-lg">
-          <div className="mb-2 text-xs font-medium text-slate-500">选择工作台主题</div>
+          <div className="mb-2 text-xs font-medium text-slate-500">选择主题</div>
           <div className="grid grid-cols-3 gap-2">
             {THEMES.map((t) => (
               <button

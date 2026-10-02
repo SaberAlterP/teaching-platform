@@ -56,8 +56,8 @@ export async function startSession(user: schema.User) {
   });
   const c = await cookies();
   c.set(SESSION_COOKIE, token, cookieOptions);
-  // 主题跟着老师账号走：登录时写入 Cookie（页面据此换色，登录页也有同样的外观），学生没有
-  if (user.role === "TEACHER" && user.theme && isTheme(user.theme))
+  // 主题跟着账号走：登录时写入 Cookie（页面据此换色，登录页也有同样的外观）
+  if (user.theme && isTheme(user.theme))
     c.set(THEME_COOKIE, user.theme, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
   else c.delete(THEME_COOKIE);
 }
