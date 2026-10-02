@@ -11,12 +11,12 @@ export async function middleware(req: NextRequest) {
   if (!s) return to("/login");
 
   if (s.mcp && pathname !== "/account/password") return to("/account/password");
-  if (pathname.startsWith("/teacher") && s.role !== "TEACHER") return to("/learn");
+  if ((pathname.startsWith("/teacher") || pathname.startsWith("/admin")) && s.role !== "TEACHER") return to("/learn");
   if (pathname.startsWith("/learn") && s.role !== "STUDENT") return to("/teacher");
   if (pathname === "/") return to(s.role === "TEACHER" ? "/teacher" : "/learn");
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/", "/login", "/teacher/:path*", "/learn/:path*", "/account/:path*"],
+  matcher: ["/", "/login", "/teacher/:path*", "/admin/:path*", "/learn/:path*", "/account/:path*"],
 };

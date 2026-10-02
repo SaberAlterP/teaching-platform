@@ -24,6 +24,8 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   role: roleEnum("role").notNull().default("STUDENT"),
   mustChangePassword: boolean("must_change_password").notNull().default(true),
+  // 管理员是叠加在角色上的标记：老师可以同时是管理员，管理员负责全站 AI 设置并查看各老师用量
+  isAdmin: boolean("is_admin").notNull().default(false),
   createdAt: createdAt(),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
 });
@@ -155,6 +157,33 @@ export const aiSettings = pgTable("ai_settings", {
   thinking: boolean("thinking").notNull().default(true),
   updatedAt: updatedAt(),
 });
+
+// 全站统一的 DeepSeek 设置（只有一行，id 固定为 global），由管理员维护
+export const aiGlobalSettings = pgTable("ai_global_settings", {
+  id: text("id").primaryKey().default("global"),
+  apiKeyEnc: text("api_key_enc").notNull().default(""),
+  apiKeyHint: text("api_key_hint").notNull().default(""),
+  model: text("model").notNull().default("deepseek-flash"),
+  baseUrl: text("base_url").notNull().default("https://api.deepseek.com"),
+  thinking: boolean("thinking").notNull().default(true),
+  updatedAt: updatedAt(),
+});
+
+// 每次调用 DeepSeek 记一条，用来按老师、按日统计 token 用量
+export const aiUsageLog = pgTable(
+  "ai_usage_log",
+  {
+    id: id(),
+    teacherId: text("teacher_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    chatId: text("chat_id"), // 对话被删后仍保留用量，所以不加外键
+    model: text("model").notNull().default(""),
+    promptTokens: integer("prompt_tokens").notNull().default(0),
+    completionTokens: integer("completion_tokens").notNull().default(0),
+    cachedTokens: integer("cached_tokens").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("ai_usage_teacher_time_idx").on(t.teacherId, t.createdAt), index("ai_usage_time_idx").on(t.createdAt)],
+);
 
 // 一次对话：完整消息记录（发给模型的格式）和运行状态
 export const aiChats = pgTable(

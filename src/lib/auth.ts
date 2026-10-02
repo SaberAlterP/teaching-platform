@@ -30,6 +30,13 @@ export async function requireTeacher() {
   return u;
 }
 
+// 管理员只看数据库里的 is_admin（不放进登录令牌），撤销权限后立即生效
+export async function requireAdmin() {
+  const u = await requireTeacher();
+  if (!u.isAdmin) redirect("/teacher");
+  return u;
+}
+
 export async function requireStudent() {
   const u = await requireUser();
   if (u.role !== "STUDENT") redirect("/teacher");
