@@ -5,6 +5,8 @@ import { requireStudent } from "@/lib/auth";
 import { visibleLessonsFor } from "@/lib/course";
 import { MODULE_LABELS, type HtmlData, type QuizData } from "@/lib/modules";
 
+export const metadata = { title: "我的成绩" };
+
 export default async function GradesPage() {
   const u = await requireStudent();
   const lessons = await visibleLessonsFor(u.id);

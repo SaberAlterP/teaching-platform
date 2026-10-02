@@ -6,6 +6,8 @@ import { QUESTION_LABELS, type HtmlData, type QuizData } from "@/lib/modules";
 import { StatsCharts } from "./StatsCharts";
 import { Gradebook } from "./Gradebook";
 
+export const metadata = { title: "成绩统计" };
+
 export default async function StatsPage() {
   const t = await requireTeacher();
   const { course, cls } = await getTeacherCourse(t.id);

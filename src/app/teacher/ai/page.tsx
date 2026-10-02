@@ -4,6 +4,8 @@ import { db, schema } from "@/db";
 import { requireTeacher } from "@/lib/auth";
 import { ApiKeysClient } from "./ApiKeysClient";
 
+export const metadata = { title: "AI 接口" };
+
 export default async function AiPage() {
   const t = await requireTeacher();
   const keys = await db

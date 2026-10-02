@@ -102,3 +102,21 @@ body {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(300%); }
 }
+
+/* ---- 界面细节：切页淡入、浮动、庆祝动画 ---- */
+@keyframes tp-fade { from { opacity: 0; } to { opacity: 1; } }
+.tp-fade { animation: tp-fade .28s ease-out; }
+@keyframes tp-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes tp-pop { 0% { transform: scale(.6); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes tp-confetti { 0% { transform: translate(0, 0) rotate(0); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); opacity: 0; } }
+@keyframes tp-drive { from { transform: translateX(-140px); } to { transform: translateX(520px); } }
+@keyframes tp-fly { from { transform: translate(-80px, 0); } to { transform: translate(560px, -24px); } }
+@keyframes tp-cloud { from { transform: translateX(-60px); } to { transform: translateX(520px); } }
+@keyframes tp-spin { to { transform: rotate(360deg); } }
+@keyframes tp-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.tp-rise { animation: tp-rise .5s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .tp-fade, .tp-rise, [class*="animate-[tp-"] { animation: none !important; }
+}
+@media (prefers-reduced-motion: reduce) { svg [style*="animation"] { animation: none !important; } }
+@keyframes tp-kenburns { from { transform: scale(1); } to { transform: scale(1.08); } }
