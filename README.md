@@ -43,6 +43,15 @@ docker compose exec app node scripts/demo-students.mjs [--count 40]   # 生成
 docker compose exec app node scripts/demo-students.mjs --clean        # 删除
 ```
 
+`scripts/demo-teachers.mjs` 往数据库加几位示例老师（账号 `demot01` 起，密码就是账号名），每人带一门课、几个课时和近 30 天的 AI 用量记录，用来看管理员的用量统计页面：
+
+```bash
+docker compose exec app node scripts/demo-teachers.mjs [--count 6]   # 生成
+docker compose exec app node scripts/demo-teachers.mjs --clean       # 删除
+```
+
+管理员是叠加在老师上的身份（`users.is_admin`）：升级时最早创建的老师账号自动成为管理员，之后可在“管理 → 老师与管理员”里给其他老师开关。全站共用的 DeepSeek 密钥/模型也在管理页设置，用量按每次调用记录在 `ai_usage_log`。
+
 ## HTML 互动包
 
 可上传单个 `.html` 文件，或包含 `index.html` 的 `.zip`。包在无 `allow-same-origin` 的沙箱 iframe 里运行，不能使用 `localStorage`。通过 `postMessage` 与平台通信：

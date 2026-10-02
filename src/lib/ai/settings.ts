@@ -30,8 +30,11 @@ export const DEFAULT_MODEL = "deepseek-flash";
 export const DEFAULT_BASE_URL = "https://api.deepseek.com";
 export const MODEL_SUGGESTIONS = ["deepseek-flash", "deepseek-v4-pro"];
 
-export async function getAiSettings(teacherId: string) {
-  const row = await db.query.aiSettings.findFirst({ where: eq(schema.aiSettings.teacherId, teacherId) });
+// 全站统一设置，只有一行（id = global），由管理员维护
+const GLOBAL = "global";
+
+export async function getAiSettings() {
+  const row = await db.query.aiGlobalSettings.findFirst({ where: eq(schema.aiGlobalSettings.id, GLOBAL) });
   return {
     apiKey: decryptKey(row?.apiKeyEnc ?? ""),
     hasKey: !!row?.apiKeyEnc,
@@ -42,11 +45,8 @@ export async function getAiSettings(teacherId: string) {
   };
 }
 
-export async function saveAiSettings(
-  teacherId: string,
-  patch: { apiKey?: string; model?: string; baseUrl?: string; thinking?: boolean },
-) {
-  const set: Partial<typeof schema.aiSettings.$inferInsert> = {};
+export async function saveAiSettings(patch: { apiKey?: string; model?: string; baseUrl?: string; thinking?: boolean }) {
+  const set: Partial<typeof schema.aiGlobalSettings.$inferInsert> = {};
   if (patch.apiKey !== undefined) {
     const k = patch.apiKey.trim();
     set.apiKeyEnc = k ? encryptKey(k) : "";
@@ -56,7 +56,18 @@ export async function saveAiSettings(
   if (patch.baseUrl !== undefined) set.baseUrl = patch.baseUrl.trim().replace(/\/+$/, "") || DEFAULT_BASE_URL;
   if (patch.thinking !== undefined) set.thinking = patch.thinking;
   await db
-    .insert(schema.aiSettings)
-    .values({ teacherId, ...set })
-    .onConflictDoUpdate({ target: schema.aiSettings.teacherId, set });
+    .insert(schema.aiGlobalSettings)
+    .values({ id: GLOBAL, ...set })
+    .onConflictDoUpdate({ target: schema.aiGlobalSettings.id, set });
+}
+
+export async function recordAiUsage(teacherId: string, chatId: string, model: string, u: { prompt_tokens?: number; completion_tokens?: number; prompt_cache_hit_tokens?: number }) {
+  await db.insert(schema.aiUsageLog).values({
+    teacherId,
+    chatId,
+    model,
+    promptTokens: u.prompt_tokens ?? 0,
+    completionTokens: u.completion_tokens ?? 0,
+    cachedTokens: u.prompt_cache_hit_tokens ?? 0,
+  });
 }
