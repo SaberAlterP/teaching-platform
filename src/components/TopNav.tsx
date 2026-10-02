@@ -8,12 +8,14 @@ export function TopNav({
   links,
   switcher,
   admin,
+  tools,
 }: {
   name: string;
   role: "TEACHER" | "STUDENT";
   links: { href: string; label: string; badge?: number }[];
   switcher?: React.ReactNode;
   admin?: boolean;
+  tools?: React.ReactNode;
 }) {
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -30,6 +32,7 @@ export function TopNav({
             <span className="ml-1.5 badge bg-slate-100 text-slate-600">{role === "TEACHER" ? "教师" : "学生"}</span>
             {admin && <span className="ml-1 badge bg-brand-50 text-brand-600">管理员</span>}
           </span>
+          {tools}
           <Link href="/account/password" className="btn-ghost">改密码</Link>
           <form action={logoutAction}>
             <button className="btn-ghost">退出</button>

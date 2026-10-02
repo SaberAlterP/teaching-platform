@@ -7,7 +7,7 @@ export async function middleware(req: NextRequest) {
   const s = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
   const to = (p: string) => NextResponse.redirect(new URL(p, req.url));
 
-  if (pathname === "/login") return s ? to(s.role === "TEACHER" ? "/teacher" : "/learn") : NextResponse.next();
+  if (pathname === "/login" || pathname === "/register") return s ? to(s.role === "TEACHER" ? "/teacher" : "/learn") : NextResponse.next();
   if (!s) return to("/login");
 
   if (s.mcp && pathname !== "/account/password") return to("/account/password");
@@ -18,5 +18,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/login", "/teacher/:path*", "/admin/:path*", "/learn/:path*", "/account/:path*"],
+  matcher: ["/", "/login", "/register", "/teacher/:path*", "/admin/:path*", "/learn/:path*", "/account/:path*"],
 };
