@@ -21,8 +21,8 @@ export function TopNav({
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
       <div className="flex h-14 items-center gap-3 px-4 sm:gap-6">
         <Link href={role === "TEACHER" ? "/teacher" : "/learn"} className="flex items-center gap-2 font-bold">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-500 text-sm text-white">实</span>
-          <span className="hidden sm:inline">教学实训平台</span>
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-500 text-sm text-white">L</span>
+          <span className="hidden sm:inline">LogiClass</span>
         </Link>
         {switcher}
         <div className={`min-w-0 ${role === "STUDENT" ? "hidden sm:block" : ""}`}><NavLinks links={links} /></div>

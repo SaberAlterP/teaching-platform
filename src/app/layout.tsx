@@ -4,7 +4,7 @@ import { THEME_COOKIE, isTheme } from "@/lib/themes";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "教学实训平台", template: "%s · 教学实训平台" },
+  title: { default: "LogiClass 物流教学实训平台", template: "%s · LogiClass" },
   description: "模块化的课程与实训管理平台",
 };
 export const viewport: Viewport = { themeColor: "#2f6fed", width: "device-width", initialScale: 1 };

@@ -119,3 +119,4 @@ body {
   .tp-fade, .tp-rise, [class*="animate-[tp-"] { animation: none !important; }
 }
 @media (prefers-reduced-motion: reduce) { svg [style*="animation"] { animation: none !important; } }
+@keyframes tp-kenburns { from { transform: scale(1); } to { transform: scale(1.08); } }
