@@ -1,4 +1,4 @@
-import { asc, count, eq } from "drizzle-orm";
+import { asc, count, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireTeacher } from "@/lib/auth";
 import { getTeacherCourse } from "@/lib/course";
@@ -8,7 +8,7 @@ import { CourseHeader } from "../CourseHeader";
 
 export default async function TeacherCoursePage() {
   const t = await requireTeacher();
-  const { course, cls, courses } = await getTeacherCourse(t.id);
+  const { course, courses } = await getTeacherCourse(t.id);
   const lessons = await db
     .select({
       id: schema.lessons.id,
@@ -29,10 +29,11 @@ export default async function TeacherCoursePage() {
     .where(eq(schema.lessons.courseId, course.id))
     .groupBy(schema.modules.lessonId);
   const countMap = new Map(counts.map((c) => [c.lessonId, c.n]));
+  const classes = await db.select().from(schema.classes).where(eq(schema.classes.courseId, course.id)).orderBy(asc(schema.classes.createdAt));
   const [{ students }] = await db
     .select({ students: count() })
     .from(schema.enrollments)
-    .where(eq(schema.enrollments.classId, cls.id));
+    .where(inArray(schema.enrollments.classId, classes.map((c) => c.id)));
 
   return (
     <div className="space-y-6">
@@ -42,7 +43,7 @@ export default async function TeacherCoursePage() {
         id={course.id}
         title={course.title}
         description={course.description}
-        className={cls.name}
+        className={classes.map((c) => c.name).join("、")}
         students={students}
         lessons={lessons.length}
         canDelete={courses.length > 1 && lessons.length === 0 && students === 0}

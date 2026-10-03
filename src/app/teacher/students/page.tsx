@@ -8,17 +8,19 @@ export const metadata = { title: "学生" };
 
 export default async function StudentsPage() {
   const t = await requireTeacher();
-  const { course, cls } = await getTeacherCourse(t.id);
+  const { course } = await getTeacherCourse(t.id);
+  const classes = await db.select().from(schema.classes).where(eq(schema.classes.courseId, course.id)).orderBy(asc(schema.classes.createdAt));
   const students = await db
     .select({
       id: schema.users.id,
       username: schema.users.username,
       name: schema.users.name,
       lastLoginAt: schema.users.lastLoginAt,
+      classId: schema.enrollments.classId,
     })
     .from(schema.users)
     .innerJoin(schema.enrollments, eq(schema.enrollments.userId, schema.users.id))
-    .where(eq(schema.enrollments.classId, cls.id))
+    .where(inArray(schema.enrollments.classId, classes.map((c) => c.id)))
     .orderBy(asc(schema.users.username));
 
   // 每个学生完成的模块数
@@ -38,7 +40,8 @@ export default async function StudentsPage() {
 
   return (
     <StudentsClient
-      className={`${course.title} · ${cls.name}`}
+      className={course.title}
+      classes={classes.map((c) => ({ id: c.id, name: c.name }))}
       totalModules={totalModules}
       students={students.map((s) => ({
         ...s,
