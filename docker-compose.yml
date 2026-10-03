@@ -14,9 +14,9 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     logging: *logging
-    mem_limit: 512m # 内存上限，异常时不会拖垮整台服务器
-    # 小内存服务器：把连接数上限从默认 100 降到 30（每个连接都占内存），应用连接池最多用 10 个
-    command: ["postgres", "-c", "max_connections=30", "-c", "random_page_cost=1.1"]
+    mem_limit: 1g # 内存上限，异常时不会拖垮整台服务器（服务器 4G）
+    # 4G 服务器：连接数 50，缓存 256MB，其余按 SSD 调整
+    command: ["postgres", "-c", "max_connections=50", "-c", "shared_buffers=256MB", "-c", "effective_cache_size=1GB", "-c", "work_mem=8MB", "-c", "random_page_cost=1.1"]
     environment:
       POSTGRES_USER: tp
       POSTGRES_PASSWORD: ${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}
@@ -33,7 +33,7 @@ services:
     build: .
     restart: unless-stopped
     logging: *logging
-    mem_limit: 768m
+    mem_limit: 1280m
     depends_on:
       db:
         condition: service_healthy
@@ -44,7 +44,7 @@ services:
       TRUST_PROXY: ${TRUST_PROXY:-false}
       TEACHER_USERNAME: ${TEACHER_USERNAME:-teacher}
       TEACHER_PASSWORD: ${TEACHER_PASSWORD:-teacher123}
-      NODE_OPTIONS: --max-old-space-size=512 # 让 Node 在内存上限以内主动回收
+      NODE_OPTIONS: --max-old-space-size=1024 # 让 Node 在内存上限以内主动回收
     volumes:
       - uploads:/data/uploads
     ports:
