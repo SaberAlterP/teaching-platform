@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { and, count, eq, inArray, max } from "drizzle-orm";
+import { and, asc, count, eq, inArray, max } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { hashPassword, requireTeacher } from "@/lib/auth";
 import { COURSE_COOKIE, assertLessonOwner, assertModuleOwner, createCourse, getTeacherCourse, listTeacherCourses } from "@/lib/course";
@@ -279,9 +279,10 @@ export async function reorderModules(lessonId: string, ids: string[]) {
 export type StudentRow = { username: string; name: string; password?: string };
 
 // 批量导入。学生的初始密码就是学号（也可以在名单里另填一列密码），不需要再分发密码。
-export async function importStudents(rows: StudentRow[]) {
+export async function importStudents(rows: StudentRow[], classId?: string) {
   const t = await requireTeacher();
-  const { cls } = await getTeacherCourse(t.id);
+  const { cls: first } = await getTeacherCourse(t.id);
+  const cls = (classId && (await myClasses(t.id)).find((c) => c.id === classId)) || first;
   const created: { username: string; name: string }[] = [];
   const skipped: { username: string; reason: string }[] = [];
   const seen = new Set<string>();
@@ -326,12 +327,12 @@ export async function resetStudentPassword(userId: string) {
 // 把本班所有学生的密码重置为各自的学号（学生自己改过的密码也会被覆盖）
 export async function resetClassPasswords() {
   const t = await requireTeacher();
-  const { cls } = await getTeacherCourse(t.id);
+  const classIds = (await myClasses(t.id)).map((c) => c.id);
   const students = await db
     .select({ id: schema.users.id, username: schema.users.username })
     .from(schema.users)
     .innerJoin(schema.enrollments, eq(schema.enrollments.userId, schema.users.id))
-    .where(and(eq(schema.enrollments.classId, cls.id), eq(schema.users.role, "STUDENT")));
+    .where(and(inArray(schema.enrollments.classId, classIds), eq(schema.users.role, "STUDENT")));
   for (const s of students) {
     await db
       .update(schema.users)
@@ -351,20 +352,73 @@ export async function updateStudent(userId: string, name: string) {
 // 从本课程移除学生；如果他不再上任何课程，连账号和作答记录一起删除
 export async function deleteStudent(userId: string) {
   const t = await requireTeacher();
-  const cls = await assertStudentInMyClass(userId, t.id);
-  await db.delete(schema.enrollments).where(and(eq(schema.enrollments.userId, userId), eq(schema.enrollments.classId, cls.id)));
+  const classIds = await assertStudentInMyClass(userId, t.id);
+  await db.delete(schema.enrollments).where(and(eq(schema.enrollments.userId, userId), inArray(schema.enrollments.classId, classIds)));
   const other = await db.query.enrollments.findFirst({ where: eq(schema.enrollments.userId, userId) });
   if (!other) await db.delete(schema.users).where(and(eq(schema.users.id, userId), eq(schema.users.role, "STUDENT")));
   revalidatePath("/teacher/students");
 }
 
+// 当前课程下的所有班级
+async function myClasses(teacherId: string) {
+  const { course } = await getTeacherCourse(teacherId);
+  return db.query.classes.findMany({ where: eq(schema.classes.courseId, course.id), orderBy: asc(schema.classes.createdAt) });
+}
+
 async function assertStudentInMyClass(userId: string, teacherId: string) {
-  const { cls } = await getTeacherCourse(teacherId);
+  const classIds = (await myClasses(teacherId)).map((c) => c.id);
   const e = await db.query.enrollments.findFirst({
-    where: and(eq(schema.enrollments.userId, userId), eq(schema.enrollments.classId, cls.id)),
+    where: and(eq(schema.enrollments.userId, userId), inArray(schema.enrollments.classId, classIds)),
   });
   if (!e) throw new Error("该学生不在你的班级");
-  return cls;
+  return classIds;
+}
+
+// ---------------- 班级 ----------------
+export async function createClass(name: string) {
+  const t = await requireTeacher();
+  const { course } = await getTeacherCourse(t.id);
+  const n = name.trim().slice(0, 30);
+  if (!n) return { error: "请输入班级名称" };
+  await db.insert(schema.classes).values({ name: n, courseId: course.id });
+  revalidatePath("/teacher", "layout");
+  return { error: "" };
+}
+
+export async function renameClass(classId: string, name: string) {
+  const t = await requireTeacher();
+  const c = (await myClasses(t.id)).find((x) => x.id === classId);
+  const n = name.trim().slice(0, 30);
+  if (!c || !n) return;
+  await db.update(schema.classes).set({ name: n }).where(eq(schema.classes.id, c.id));
+  revalidatePath("/teacher", "layout");
+}
+
+// 只能删空班级，且课程至少保留一个班级
+export async function deleteClass(classId: string) {
+  const t = await requireTeacher();
+  const all = await myClasses(t.id);
+  const c = all.find((x) => x.id === classId);
+  if (!c) return { error: "班级不存在" };
+  if (all.length <= 1) return { error: "至少保留一个班级" };
+  const has = await db.query.enrollments.findFirst({ where: eq(schema.enrollments.classId, c.id) });
+  if (has) return { error: "班里还有学生，请先把学生移到其他班级" };
+  await db.delete(schema.classes).where(eq(schema.classes.id, c.id));
+  revalidatePath("/teacher", "layout");
+  return { error: "" };
+}
+
+// 把学生换到本课程的另一个班级
+export async function moveStudent(userId: string, classId: string) {
+  const t = await requireTeacher();
+  const all = await myClasses(t.id);
+  if (!all.some((c) => c.id === classId)) throw new Error("班级不存在");
+  const classIds = await assertStudentInMyClass(userId, t.id);
+  await db.transaction(async (tx) => {
+    await tx.delete(schema.enrollments).where(and(eq(schema.enrollments.userId, userId), inArray(schema.enrollments.classId, classIds)));
+    await tx.insert(schema.enrollments).values({ userId, classId });
+  });
+  revalidatePath("/teacher", "layout");
 }
 
 // ---------------- 批改 ----------------
