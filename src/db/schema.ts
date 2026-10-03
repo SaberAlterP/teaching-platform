@@ -30,6 +30,7 @@ export const users = pgTable("users", {
   // 自助注册的老师默认待批准（approved=false）；已有账号和管理员创建的账号都是 true
   approved: boolean("approved").notNull().default(true),
   theme: text("theme").notNull().default(""), // 教师工作台主题，空 = 默认
+  onboarded: boolean("onboarded").notNull().default(false), // 老师是否已看过新手引导
   createdAt: createdAt(),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
 });
