@@ -5,23 +5,30 @@ import { getTeacherCourse } from "@/lib/course";
 import { QUESTION_LABELS, type HtmlData, type QuizData } from "@/lib/modules";
 import { StatsCharts } from "./StatsCharts";
 import { Gradebook } from "./Gradebook";
+import { QuestionTable } from "./QuestionTable";
+import { Filters } from "./Filters";
 
 export const metadata = { title: "成绩统计" };
 
-export default async function StatsPage() {
+export default async function StatsPage({ searchParams }: { searchParams: Promise<{ lesson?: string; cls?: string }> }) {
   const t = await requireTeacher();
-  const { course, cls } = await getTeacherCourse(t.id);
+  const sp = await searchParams;
+  const { course } = await getTeacherCourse(t.id);
+  const classes = await db.select().from(schema.classes).where(eq(schema.classes.courseId, course.id)).orderBy(asc(schema.classes.createdAt));
+  const clsSel = classes.find((c) => c.id === sp.cls);
+  const classIds = (clsSel ? [clsSel] : classes).map((c) => c.id);
 
   const students = await db
     .select({ id: schema.users.id, name: schema.users.name, username: schema.users.username })
     .from(schema.users)
     .innerJoin(schema.enrollments, eq(schema.enrollments.userId, schema.users.id))
-    .where(eq(schema.enrollments.classId, cls.id))
+    .where(inArray(schema.enrollments.classId, classIds))
     .orderBy(asc(schema.users.username));
   const sids = students.map((s) => s.id);
 
   const lessons = await db.select().from(schema.lessons).where(eq(schema.lessons.courseId, course.id)).orderBy(asc(schema.lessons.order));
-  const lids = lessons.map((l) => l.id);
+  const lessonSel = lessons.find((l) => l.id === sp.lesson);
+  const lids = (lessonSel ? [lessonSel] : lessons).map((l) => l.id);
   // 图文正文很大，统计用不到：只有习题和互动内容才读 data
   const mods = lids.length
     ? await db
@@ -93,13 +100,29 @@ export default async function StatsPage() {
     });
 
   // ---- 每个课时完成率 ----
-  const lessonCompletion = lessons.map((l, i) => {
+  const lessonCompletion = lessons.map((l, i) => ({ l, i })).filter(({ l }) => lids.includes(l.id)).map(({ l, i }) => {
     const lm = mods.filter((m) => m.lessonId === l.id).map((m) => m.id);
     const set = new Set(lm);
     const done = myProg.filter((p) => set.has(p.moduleId)).length;
     const denom = lm.length * students.length;
     return { name: `第${i + 1}课`, title: l.title, rate: denom ? Math.round((done / denom) * 100) : 0 };
   });
+
+  // ---- 每个课时的平均得分率（只算已作答的计分项）----
+  const lessonScore = lessons
+    .map((l, i) => {
+      let got = 0;
+      let full = 0;
+      for (const it of items) {
+        const mod = scoredMods.find((m) => m.id === it.id)!;
+        if (mod.lessonId !== l.id) continue;
+        for (const s of mySubs) {
+          if (s.moduleId === it.id && s.score !== null) { got += s.score; full += it.max; }
+        }
+      }
+      return { name: `第${i + 1}课`, title: l.title, rate: full ? Math.round((got / full) * 100) : null, in: lids.includes(l.id) };
+    })
+    .filter((x) => x.in && x.rate !== null) as { name: string; title: string; rate: number }[];
 
   // ---- 总分分布 ----
   const buckets = ["0-59%", "60-69%", "70-79%", "80-89%", "90-100%"].map((name) => ({ name, count: 0 }));
@@ -116,7 +139,15 @@ export default async function StatsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">成绩统计</h1>
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="text-2xl font-bold">成绩统计</h1>
+        <Filters
+          lessons={lessons.map((l, i) => ({ id: l.id, label: `${i + 1}. ${l.title}` }))}
+          classes={classes.map((c) => ({ id: c.id, label: c.name }))}
+          lesson={lessonSel?.id ?? ""}
+          cls={clsSel?.id ?? ""}
+        />
+      </div>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Tile label="学生人数" value={String(students.length)} />
@@ -125,57 +156,11 @@ export default async function StatsPage() {
         <Tile label="待批改" value={String(pending)} href={pending ? "/teacher/grading" : undefined} />
       </div>
 
-      <StatsCharts lessonCompletion={lessonCompletion} buckets={buckets} />
+      <StatsCharts lessonCompletion={lessonCompletion} lessonScore={lessonScore} buckets={buckets} />
 
-      <section className="card overflow-hidden">
-        <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
-          <h2 className="font-semibold">每道题的得分率</h2>
-          {weakest.length > 0 && (
-            <span className="text-sm text-slate-500">
-              最需要讲评：{weakest.map((w) => `${w.where.split(" / ")[0].split(". ")[0]}课第${w.no}题（${Math.round(w.rate! * 100)}%）`).join("、")}
-            </span>
-          )}
-        </div>
-        <div className="max-h-[480px] overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-slate-50 text-left text-slate-500">
-              <tr>
-                <th className="px-4 py-2 font-medium">位置</th>
-                <th className="px-4 py-2 font-medium">题目</th>
-                <th className="px-4 py-2 font-medium">作答人数</th>
-                <th className="w-56 px-4 py-2 font-medium">得分率</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {questionStats.map((q) => (
-                <tr key={q.key}>
-                  <td className="px-4 py-2 whitespace-nowrap text-slate-500">{q.where} · 第{q.no}题</td>
-                  <td className="px-4 py-2"><span className="mr-1 text-xs text-slate-400">[{q.type}]</span>{q.prompt}</td>
-                  <td className="px-4 py-2 text-slate-600">{q.answered}/{students.length}</td>
-                  <td className="px-4 py-2">
-                    {q.rate === null ? (
-                      <span className="text-slate-300">{q.answered ? "待批改" : "暂无数据"}</span>
-                    ) : (
-                      <div className="flex items-center gap-2" title={`${Math.round(q.rate * 100)}%`}>
-                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
-                          <div className={`h-full rounded-full ${q.rate < 0.6 ? "bg-red-400" : "bg-brand-500"}`} style={{ width: `${q.rate * 100}%` }} />
-                        </div>
-                        <span className="w-10 text-right text-slate-700">{Math.round(q.rate * 100)}%</span>
-                        {q.rate < 0.6 && <span className="text-xs text-red-600">偏低</span>}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {questionStats.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400">还没有习题</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <QuestionTable rows={questionStats} studentCount={students.length} weakest={weakest.map((w) => `${w.where.split(" / ")[0].split(". ")[0]}课第${w.no}题（${Math.round(w.rate! * 100)}%）`)} />
 
-      <Gradebook items={items} rows={book} totalMax={totalMax} />
+      <Gradebook suffix={lessonSel ? `_${lessonSel.title}` : ""} items={items} rows={book} totalMax={totalMax} />
     </div>
   );
 }
