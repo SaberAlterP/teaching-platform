@@ -5,7 +5,7 @@ import * as XLSX from "xlsx";
 type Item = { id: string; label: string; lesson: string; max: number };
 type Row = { id: string; name: string; username: string; scores: (number | null)[]; total: number };
 
-export function Gradebook({ items, rows, totalMax }: { items: Item[]; rows: Row[]; totalMax: number }) {
+export function Gradebook({ items, rows, totalMax, suffix = "" }: { items: Item[]; rows: Row[]; totalMax: number; suffix?: string }) {
   const [sort, setSort] = useState<"username" | "total">("username");
   const sorted = [...rows].sort((a, b) => (sort === "total" ? b.total - a.total : a.username.localeCompare(b.username)));
 
@@ -18,7 +18,7 @@ export function Gradebook({ items, rows, totalMax }: { items: Item[]; rows: Row[
     });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "成绩");
-    XLSX.writeFile(wb, `成绩册_${new Date().toLocaleDateString("zh-CN").replace(/\//g, "-")}.xlsx`);
+    XLSX.writeFile(wb, `成绩册${suffix}_${new Date().toLocaleDateString("zh-CN").replace(/\//g, "-")}.xlsx`);
   }
 
   return (

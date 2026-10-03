@@ -100,6 +100,18 @@ export async function setLessonStatus(lessonId: string, status: "DRAFT" | "OPEN"
   return { error: "" };
 }
 
+// 批量开放 / 设为草稿（定时开放仍在单个课时里设置）
+export async function setLessonsStatus(ids: string[], status: "DRAFT" | "OPEN") {
+  const t = await requireTeacher();
+  const { course } = await getTeacherCourse(t.id);
+  if (!ids.length) return;
+  await db
+    .update(schema.lessons)
+    .set({ status, openAt: null })
+    .where(and(inArray(schema.lessons.id, ids), eq(schema.lessons.courseId, course.id)));
+  revalidatePath("/teacher", "layout");
+}
+
 export async function deleteLesson(lessonId: string) {
   const t = await requireTeacher();
   await assertLessonOwner(lessonId, t.id);
