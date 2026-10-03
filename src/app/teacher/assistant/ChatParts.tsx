@@ -135,6 +135,15 @@ export function ChatBody({
   const [pending, start] = useTransition();
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  const box = useRef<HTMLTextAreaElement>(null);
+
+  // 输入框随内容长高（最多约 6 行）
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 160) + "px";
+  }, [text]);
 
   // 新内容出现时滚到底部（老师往上翻看时不打扰）
   useEffect(() => {
@@ -190,12 +199,13 @@ export function ChatBody({
     <>
       <div
         ref={scroller}
-        className={`min-h-0 flex-1 space-y-3 overflow-y-auto ${compact ? "px-3 py-3" : "px-4 py-4"}`}
+        className={`min-h-0 flex-1 overflow-y-auto ${compact ? "space-y-3 px-3 py-3" : "px-4 py-5"}`}
         onScroll={(e) => {
           const el = e.currentTarget;
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
         }}
       >
+        <div className={compact ? "contents" : "mx-auto max-w-3xl space-y-5"}>
         {!hasKey && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
             管理员还没有配置 DeepSeek 密钥，AI 暂时不能用，请联系管理员。
@@ -236,51 +246,63 @@ export function ChatBody({
             <button className="btn-outline py-1" disabled={pending} onClick={() => act(() => resumeRun(chatId!))}>继续</button>
           </div>
         )}
+        </div>
       </div>
 
-      {/* 输入区 */}
-      <div className={`border-t border-slate-100 ${compact ? "p-2" : "p-3"}`}>
-        {err && <p className="mb-2 text-sm text-red-600">{err}</p>}
-        {!!files.length && (
-          <div className="mb-2 flex flex-wrap gap-1.5">
-            {files.map((f) => (
-              <span key={f.id} className="badge bg-slate-100 text-slate-700">
-                📎 {f.name}（{Math.round(f.chars / 1000)} 千字{f.truncated ? "，已截断" : ""}）
-                <button className="ml-1 text-slate-400 hover:text-red-600" onClick={() => setFiles((x) => x.filter((y) => y.id !== f.id))}>×</button>
-              </span>
-            ))}
-          </div>
-        )}
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-              e.preventDefault();
-              if (!active) send();
-            }
-          }}
-          rows={compact ? 2 : 3}
-          className="input resize-none"
-          placeholder={lesson && !chatId ? `告诉 AI 要怎么改《${lesson.title}》…` : "告诉 AI 要做什么…（Ctrl+Enter 发送）"}
-        />
-        <div className="mt-2 flex items-center gap-2">
-          <label className={`btn-ghost cursor-pointer ${compact ? "px-2 py-1" : ""} ${uploading ? "opacity-50" : ""}`}>
-            📎 {uploading ? "读取中…" : "附件"}
-            <input type="file" multiple className="hidden" accept=".xlsx,.xls,.docx,.pptx,.txt,.md,.csv" disabled={uploading} onChange={(e) => { attach(e.target.files); e.target.value = ""; }} />
-          </label>
-          {!compact && <span className="hidden text-xs text-slate-400 sm:inline">Excel / Word / PPT / 文本</span>}
-          {!!usage.requests && (
-            <span className={`ml-auto text-xs text-slate-400 ${compact ? "truncate" : "hidden md:inline"}`} title="DeepSeek 按 token 计费">
-              {compact ? `用量 ${wan(usage.prompt)} / ${wan(usage.completion)}` : `用量：输入 ${wan(usage.prompt)}（缓存 ${usage.prompt ? Math.round(((usage.cached ?? 0) / usage.prompt) * 100) : 0}%）· 输出 ${wan(usage.completion)} tokens`}
-            </span>
+      {/* 输入区：圆角输入条，和首页的输入线保持同一风格 */}
+      <div className={compact ? "border-t border-slate-100 p-2" : "px-4 pb-4 pt-1"}>
+        <div className={compact ? "" : "mx-auto max-w-3xl"}>
+          {err && <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{err}</p>}
+          {!!files.length && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {files.map((f) => (
+                <span key={f.id} className="badge bg-slate-100 text-slate-700">
+                  📎 {f.name}（{Math.round(f.chars / 1000)} 千字{f.truncated ? "，已截断" : ""}）
+                  <button className="ml-1 text-slate-400 hover:text-red-600" onClick={() => setFiles((x) => x.filter((y) => y.id !== f.id))}>×</button>
+                </span>
+              ))}
+            </div>
           )}
-          {active ? (
-            <button className={`btn-outline ${usage.requests ? "ml-2" : "ml-auto"}`} onClick={() => act(() => stopRun(chatId!))}>■ 停止</button>
-          ) : (
-            <button className={`btn-primary ${usage.requests ? "ml-2" : "ml-auto"}`} disabled={pending || uploading || (!text.trim() && !files.length)} onClick={() => send()}>
-              {pending ? "发送中…" : "发送"}
-            </button>
+          <div className="flex items-end gap-1.5 rounded-3xl border border-slate-200 bg-white py-1.5 pl-2 pr-2 shadow-sm transition focus-within:border-brand-500 focus-within:shadow-md">
+            <label className={`flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 ${uploading ? "opacity-50" : ""}`} title={uploading ? "读取中…" : "添加附件：Excel / Word / PPT / 文本"}>
+              {uploading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-500" /> : "📎"}
+              <input type="file" multiple className="hidden" accept=".xlsx,.xls,.docx,.pptx,.txt,.md,.csv" disabled={uploading} onChange={(e) => { attach(e.target.files); e.target.value = ""; }} />
+            </label>
+            <textarea
+              ref={box}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  if (!active) send();
+                }
+              }}
+              rows={1}
+              className="min-h-9 flex-1 resize-none bg-transparent py-1.5 text-[15px] outline-none placeholder:text-slate-400"
+              placeholder={lesson && !chatId ? `告诉 AI 要怎么改《${lesson.title}》…` : "告诉 AI 要做什么…（Enter 发送，Shift+Enter 换行）"}
+              aria-label="告诉 AI 要做什么"
+            />
+            {active ? (
+              <button className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-slate-800 px-3 text-sm text-white transition hover:bg-slate-700" onClick={() => act(() => stopRun(chatId!))} title="停止">
+                ■ 停止
+              </button>
+            ) : (
+              <button
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500 text-white transition hover:bg-brand-600 disabled:bg-slate-200 disabled:text-slate-400"
+                disabled={pending || uploading || (!text.trim() && !files.length)}
+                onClick={() => send()}
+                aria-label="发送"
+                title="发送（Enter）"
+              >
+                {pending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : "↑"}
+              </button>
+            )}
+          </div>
+          {!!usage.requests && (
+            <p className="mt-1.5 truncate text-center text-xs text-slate-400" title="DeepSeek 按 token 计费">
+              {compact ? `用量 ${wan(usage.prompt)} / ${wan(usage.completion)}` : `用量：输入 ${wan(usage.prompt)}（缓存 ${usage.prompt ? Math.round(((usage.cached ?? 0) / usage.prompt) * 100) : 0}%）· 输出 ${wan(usage.completion)} tokens`}
+            </p>
           )}
         </div>
       </div>
@@ -305,14 +327,16 @@ function Welcome({ lesson, compact, onPick }: { lesson: { title: string } | null
         "新建一个课时：……",
       ];
   return (
-    <div className={`mx-auto max-w-xl text-center ${compact ? "py-2" : "py-6"}`}>
-      <div className="text-lg font-semibold">想让 AI 帮你做什么？</div>
-      <p className="mt-1 text-sm text-slate-500">
+    <div className={`mx-auto max-w-2xl text-center ${compact ? "py-2" : "pb-4 pt-10 sm:pt-16"}`}>
+      <div className={`${compact ? "text-lg" : "text-3xl sm:text-4xl"} font-bold tracking-tight`}>
+        想让 AI 帮你做<span className="text-brand-600">什么</span>？
+      </div>
+      <p className="mx-auto mt-2 max-w-lg text-sm text-slate-500">
         它能直接修改课时内容、出题、做 HTML 动画、从零建课。新建的内容都是草稿；改已开放的课时前会先问你；每一步改动都可以撤销。
       </p>
-      <div className={`mt-4 grid gap-2 text-left ${compact ? "" : "sm:grid-cols-2"}`}>
+      <div className={`mt-5 flex flex-wrap justify-center gap-2 ${compact ? "text-xs" : "text-sm"}`}>
         {ideas.map((s) => (
-          <button key={s} className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 hover:border-brand-500" onClick={() => onPick(s)}>
+          <button key={s} className="rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-slate-600 transition hover:border-brand-500 hover:bg-brand-50 hover:text-brand-700" onClick={() => onPick(s)}>
             {s}
           </button>
         ))}
@@ -341,15 +365,18 @@ function Messages({ items, busy, onUndo }: { items: Item[]; busy: boolean; onUnd
           <ToolGroup key={g[0].key} tools={g} busy={busy} onUndo={onUndo} />
         ) : g.kind === "user" ? (
           <div key={g.key} className="flex justify-end">
-            <div className="max-w-[85%] rounded-2xl rounded-br-md bg-brand-500 px-4 py-2 text-sm text-white">
+            <div className="max-w-[85%] rounded-3xl rounded-br-lg bg-brand-500 px-4 py-2.5 text-[15px] text-white shadow-sm">
               <div className="whitespace-pre-wrap">{g.text}</div>
               {!!g.files.length && <div className="mt-1 text-xs text-brand-100">{g.files.map((f) => `📎 ${f}`).join("　")}</div>}
             </div>
           </div>
         ) : g.kind === "assistant" && (g.text || g.truncated) ? (
-          <div key={g.key + i} className="max-w-[92%] text-sm">
-            {g.text && <Markdown className="text-[15px]">{g.text}</Markdown>}
-            {g.truncated && <div className="text-xs text-amber-600">（这段回复太长，被截断了）</div>}
+          <div key={g.key + i} className="flex gap-3">
+            <AiAvatar />
+            <div className="min-w-0 max-w-[92%] flex-1 pt-0.5 text-sm">
+              {g.text && <Markdown className="text-[15px]">{g.text}</Markdown>}
+              {g.truncated && <div className="text-xs text-amber-600">（这段回复太长，被截断了）</div>}
+            </div>
           </div>
         ) : null,
       )}
@@ -357,11 +384,15 @@ function Messages({ items, busy, onUndo }: { items: Item[]; busy: boolean; onUnd
   );
 }
 
+function AiAvatar() {
+  return <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm text-brand-600" aria-hidden>✦</span>;
+}
+
 function ToolGroup({ tools, busy, onUndo }: { tools: ToolItem[]; busy: boolean; onUndo: (t: ToolItem) => void }) {
   const [open, setOpen] = useState(false);
   const hidden = !open && tools.length > 5 ? tools.length - 3 : 0;
   return (
-    <div className="space-y-1 rounded-xl bg-slate-50 px-3 py-2 text-sm">
+    <div className="ml-10 space-y-1 rounded-2xl bg-slate-50 px-3 py-2 text-sm">
       {hidden > 0 && (
         <button className="text-xs text-slate-500 hover:text-brand-600" onClick={() => setOpen(true)}>
           ▸ 展开前面 {hidden} 步
@@ -400,7 +431,9 @@ function LiveBlock({ live }: { live: Live }) {
     : live.phase === "tool" ? "正在执行…"
     : "";
   return (
-    <div className="space-y-1 text-sm">
+    <div className="flex gap-3 text-sm">
+      <AiAvatar />
+      <div className="min-w-0 flex-1 space-y-1 pt-0.5">
       {live.content && <Markdown className="text-[15px]">{live.content}</Markdown>}
       {text && (
         <div className="flex items-center gap-2 text-slate-500">
@@ -416,6 +449,7 @@ function LiveBlock({ live }: { live: Live }) {
       {showThink && live.phase === "thinking" && (
         <div className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-2 text-xs text-slate-500">{live.reasoning}</div>
       )}
+      </div>
     </div>
   );
 }

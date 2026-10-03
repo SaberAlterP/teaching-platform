@@ -50,6 +50,13 @@
       "when": 1790958926760,
       "tag": "0006_teacher_signup_theme",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791006710882,
+      "tag": "0007_teacher_onboarding",
+      "breakpoints": true
     }
   ]
 }

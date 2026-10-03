@@ -5,6 +5,7 @@ import { getTeacherCourse } from "@/lib/course";
 import { TopNav } from "@/components/TopNav";
 import { ThemePicker } from "@/components/ThemePicker";
 import { CourseSwitcher } from "./CourseSwitcher";
+import { Onboarding } from "./Onboarding";
 
 export default async function TeacherLayout({ children }: { children: React.ReactNode }) {
   const t = await requireTeacher();
@@ -38,6 +39,7 @@ export default async function TeacherLayout({ children }: { children: React.Reac
         ]}
       />
       <main className="mx-auto max-w-7xl px-4 py-6 has-[.lesson-full]:max-w-none">{children}</main>
+      {!t.onboarded && <Onboarding />}
     </>
   );
 }
