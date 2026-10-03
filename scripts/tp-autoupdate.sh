@@ -1,13 +1,13 @@
 #!/bin/bash
 # 服务器自动更新脚本（root 的 cron 每 5 分钟运行一次，安装到 /usr/local/bin/tp-autoupdate.sh）。
-# origin/main 有新提交时：拉代码 -> 停掉 app（腾出内存）-> 构建 -> 启动。
-# 小内存服务器上构建很吃内存，app 不停掉会把机器拖到卡死；更新期间网站会短暂打不开。
+# origin/main 有新提交时：拉代码 -> 网站不停机直接构建 -> 构建成功后换容器（只断几秒）。
+# 构建失败网站不受影响；新版本起不来会自动换回旧镜像。服务器 4G 内存，构建时需至少 1.2G 可用。
 # 手动更新：sudo /usr/local/bin/tp-autoupdate.sh --force
 set -u
 DIR=/home/admin/teaching-platform
 LAST=/var/lib/tp-autoupdate.last
 LOG=/var/log/tp-autoupdate.log
-MIN_FREE_MB=600
+MIN_FREE_MB=1200
 
 exec 9>/var/lock/tp-autoupdate.lock
 flock -n 9 || exit 0
@@ -28,21 +28,38 @@ log "开始更新到 ${REMOTE:0:7}"
 git_admin checkout -q -- . 2>/dev/null
 git_admin merge -q --ff-only origin/main >> "$LOG" 2>&1 || { log "合并失败，取消更新"; exit 1; }
 
-compose stop app >> "$LOG" 2>&1
-sync; echo 3 > /proc/sys/vm/drop_caches 2>/dev/null
 FREE_MB=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo)
 if [ "$FREE_MB" -lt "$MIN_FREE_MB" ]; then
-  log "可用内存只有 ${FREE_MB}MB，不够构建，取消更新并恢复旧版本"
-  compose up -d >> "$LOG" 2>&1
+  log "可用内存只有 ${FREE_MB}MB，不够构建，取消更新（网站未受影响）"
   exit 1
 fi
 
-if timeout 30m docker compose -f "$DIR/docker-compose.yml" build >> "$LOG" 2>&1; then
-  compose up -d >> "$LOG" 2>&1
-  docker image prune -f >> "$LOG" 2>&1
-  log "更新完成 ${REMOTE:0:7}"
-else
-  compose up -d >> "$LOG" 2>&1  # 构建失败：用旧镜像把网站恢复
-  log "构建失败，已恢复旧版本"
+# 记下当前正在运行的镜像，新版本起不来时用它恢复
+APP_CID=$(compose ps -q app 2>/dev/null)
+OLD_IMAGE=$(docker inspect --format '{{.Image}}' "$APP_CID" 2>/dev/null)
+IMAGE_NAME=$(docker inspect --format '{{.Config.Image}}' "$APP_CID" 2>/dev/null)
+[ -n "$OLD_IMAGE" ] && docker tag "$OLD_IMAGE" tp-app-previous >> "$LOG" 2>&1
+
+# 网站保持运行，直接构建新镜像
+if ! timeout 30m docker compose -f "$DIR/docker-compose.yml" build >> "$LOG" 2>&1; then
+  log "构建失败，网站仍在运行旧版本"
   exit 1
 fi
+
+# 构建成功后才切换容器（只会断几秒）
+compose up -d >> "$LOG" 2>&1
+for _ in $(seq 1 30); do
+  if curl -fsS -o /dev/null --max-time 3 http://127.0.0.1/ 2>/dev/null; then
+    docker image prune -f >> "$LOG" 2>&1
+    log "更新完成 ${REMOTE:0:7}"
+    exit 0
+  fi
+  sleep 3
+done
+
+log "新版本没有正常启动，正在恢复旧版本"
+if [ -n "$OLD_IMAGE" ] && [ -n "$IMAGE_NAME" ]; then
+  docker tag tp-app-previous "$IMAGE_NAME" >> "$LOG" 2>&1
+  compose up -d --no-build --force-recreate app >> "$LOG" 2>&1
+fi
+exit 1

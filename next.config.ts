@@ -3,8 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone", // Docker 部署用
   poweredByHeader: false,
-  // 小内存服务器构建：只用 1 个进程，并让 webpack 少占内存
-  experimental: { cpus: 1, webpackMemoryOptimizations: true },
+  // 服务器 2 核：构建最多 2 个进程，并让 webpack 少占内存
+  experimental: { cpus: 2, webpackMemoryOptimizations: true },
   // AI 助手技能里的 HTML 模板（src/lib/ai/*.html）按文本导入
   webpack(config) {
     config.module.rules.push({ test: /\.html$/, type: "asset/source" });

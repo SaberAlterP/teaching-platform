@@ -6,8 +6,8 @@ RUN npm config set registry https://registry.npmmirror.com
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
-# 小内存服务器（1.6G）上构建：限制 Node 堆内存，避免内存耗尽把整台机器拖死
-ENV NODE_OPTIONS=--max-old-space-size=700 NEXT_TELEMETRY_DISABLED=1
+# 4G 服务器上构建（网站不停机）：堆内存上限 1.5G，避免把机器拖死
+ENV NODE_OPTIONS=--max-old-space-size=1536 NEXT_TELEMETRY_DISABLED=1
 RUN npm run demo:build && npm run build
 
 # ---------- 运行 ----------
