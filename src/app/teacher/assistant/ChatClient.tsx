@@ -36,11 +36,11 @@ export function ChatClient({
     <div className="flex min-h-0 flex-1 gap-3">
       {/* 对话列表 */}
       <aside className={`${showList ? "fixed inset-0 z-40 flex bg-black/30 p-3" : "hidden"} lg:static lg:flex lg:w-56 lg:shrink-0 lg:bg-transparent lg:p-0`} onClick={() => setShowList(false)}>
-        <div className="card flex w-64 flex-col overflow-hidden lg:w-full" onClick={(e) => e.stopPropagation()}>
-          <Link href="/teacher/assistant" className="btn-primary m-2">＋ 新对话</Link>
+        <div className="flex w-64 flex-col overflow-hidden rounded-2xl bg-white shadow-xl lg:w-full lg:rounded-none lg:bg-transparent lg:shadow-none" onClick={(e) => e.stopPropagation()}>
+          <Link href="/teacher/assistant" className="m-2 flex items-center justify-center gap-1 rounded-full border border-slate-200 bg-white py-2 text-sm font-medium text-slate-700 transition hover:border-brand-500 hover:text-brand-600">＋ 新对话</Link>
           <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
             {chats.map((c) => (
-              <div key={c.id} className={`group flex items-center rounded-lg text-sm ${c.id === chatId ? "bg-brand-50 text-brand-700" : "hover:bg-slate-100"}`}>
+              <div key={c.id} className={`group flex items-center rounded-xl text-sm ${c.id === chatId ? "bg-brand-50 font-medium text-brand-700" : "text-slate-600 hover:bg-slate-100"}`}>
                 <Link href={`/teacher/assistant?c=${c.id}`} className="min-w-0 flex-1 truncate px-2 py-1.5" title={c.title}>
                   {ACTIVE.includes(c.status) && <span className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-500" />}
                   {c.status === "waiting" && <span className="mr-1 inline-block h-2 w-2 rounded-full bg-amber-500" />}
@@ -68,8 +68,8 @@ export function ChatClient({
       </aside>
 
       {/* 对话 */}
-      <section className="card flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2 text-sm">
+      <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl bg-white/60">
+        <div className="flex items-center gap-2 px-4 py-2 text-sm">
           <button className="btn-ghost px-2 py-1 lg:hidden" onClick={() => setShowList(true)}>☰</button>
           <span className="truncate font-medium">{poll?.title ?? (lesson ? `修改课时：${lesson.title}` : "新对话")}</span>
           {lesson && (
