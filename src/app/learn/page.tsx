@@ -19,7 +19,7 @@ function ago(t: number) {
 
 export default async function LearnHome() {
   const u = await requireStudent();
-  const { courses, stats, lessonsDone, overall, next, recent, scoreRate, streak } = await loadLearnData(u.id);
+  const { notices, courses, stats, lessonsDone, overall, next, recent, scoreRate, streak } = await loadLearnData(u.id);
   const courseTitle = new Map(courses.map((c) => [c.id, c.title]));
   const todo = stats.length - lessonsDone;
 
@@ -52,6 +52,25 @@ export default async function LearnHome() {
           </div>
         </div>
       </section>
+
+      {notices.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-xl font-bold">📢 公告</h2>
+          <ul className="space-y-2">
+            {notices.map((n) => (
+              <li key={n.id} className="card border-l-4 border-l-amber-400 p-4">
+                <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-400">
+                  {n.pinned && <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-700">置顶</span>}
+                  <span>{courseTitle.get(n.courseId)}</span>
+                  <span className="ml-auto">{ago(n.createdAt.getTime())}</span>
+                </div>
+                <div className="mt-1 font-semibold text-slate-800">{n.title}</div>
+                {n.body && <p className="mt-1 text-sm whitespace-pre-wrap text-slate-600">{n.body}</p>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {stats.length > 0 && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { studentCourseIds, visibleLessonsFor } from "@/lib/course";
 import type { HtmlData, QuizData } from "@/lib/modules";
@@ -13,7 +13,7 @@ export async function loadLearnData(userId: string) {
   const courseIds = (await studentCourseIds(userId)).filter((id) => openCourseIds.has(id));
   const ids = lessons.map((l) => l.id);
   // 这几组查询互不依赖，同时发出，页面等待时间 = 最慢的那一个
-  const [courses, mods, done, scoredMods, subs] = await Promise.all([
+  const [courses, mods, done, scoredMods, subs, notices] = await Promise.all([
     courseIds.length
       ? db.select().from(schema.courses).where(inArray(schema.courses.id, courseIds)).orderBy(asc(schema.courses.createdAt))
       : [],
@@ -40,6 +40,15 @@ export async function loadLearnData(userId: string) {
           .from(schema.submissions)
           .innerJoin(schema.modules, eq(schema.modules.id, schema.submissions.moduleId))
           .where(and(eq(schema.submissions.userId, userId), inArray(schema.modules.lessonId, ids)))
+      : [],
+    // 老师发给本人所在课程的公告：置顶在前，最多 5 条
+    courseIds.length
+      ? db
+          .select()
+          .from(schema.announcements)
+          .where(inArray(schema.announcements.courseId, courseIds))
+          .orderBy(desc(schema.announcements.pinned), desc(schema.announcements.createdAt))
+          .limit(5)
       : [],
   ]);
   const doneSet = new Set(done.map((d) => d.id));
@@ -97,5 +106,5 @@ export async function loadLearnData(userId: string) {
     else if (t < now) break;
   }
   const recent = stats.filter((s) => s.lastAt).sort((a, b) => b.lastAt - a.lastAt).slice(0, 4);
-  return { courses, stats, lessonsDone, overall, next, recent, scoreRate: max ? Math.round((got / max) * 100) : null, streak };
+  return { notices, courses, stats, lessonsDone, overall, next, recent, scoreRate: max ? Math.round((got / max) * 100) : null, streak };
 }
