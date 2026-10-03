@@ -2,9 +2,10 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import * as XLSX from "xlsx";
 import QRCode from "qrcode";
-import { deleteStudent, importStudents, resetClassPasswords, resetStudentPassword, updateStudent, type StudentRow } from "../actions";
+import { createClass, deleteClass, deleteStudent, importStudents, moveStudent, renameClass, resetClassPasswords, resetStudentPassword, updateStudent, type StudentRow } from "../actions";
 
-type S = { id: string; username: string; name: string; lastLoginAt: string | null; done: number };
+type S = { id: string; username: string; name: string; lastLoginAt: string | null; done: number; classId: string };
+type C = { id: string; name: string };
 type Result = { message: string; skipped: { username: string; reason: string }[] };
 
 // 识别表头：学号/账号/username，姓名/name，密码/password（可选）
@@ -34,7 +35,11 @@ function parsePasted(text: string): StudentRow[] {
     .filter((r) => r.username && !/学号|账号/.test(r.username));
 }
 
-export function StudentsClient({ className, students, totalModules }: { className: string; students: S[]; totalModules: number }) {
+export function StudentsClient({ className, classes, students, totalModules }: { className: string; classes: C[]; students: S[]; totalModules: number }) {
+  const [clsFilter, setClsFilter] = useState("");
+  const [target, setTarget] = useState(classes[0]?.id ?? "");
+  const [manage, setManage] = useState(false);
+  const [newName, setNewName] = useState("");
   const [mode, setMode] = useState<null | "file" | "paste">(null);
   const [preview, setPreview] = useState<StudentRow[]>([]);
   const [paste, setPaste] = useState("");
@@ -62,7 +67,7 @@ export function StudentsClient({ className, students, totalModules }: { classNam
 
   function doImport(rows: StudentRow[]) {
     start(async () => {
-      const r = await importStudents(rows);
+      const r = await importStudents(rows, target);
       setResult({ message: `成功创建 ${r.created.length} 个账号，初始密码就是各自的学号。`, skipped: r.skipped });
       setPreview([]);
       setPaste("");
@@ -77,7 +82,7 @@ export function StudentsClient({ className, students, totalModules }: { classNam
     XLSX.writeFile(wb, "学生名单模板.xlsx");
   }
 
-  const list = students.filter((s) => !q || s.username.includes(q) || s.name.includes(q));
+  const list = students.filter((s) => (!clsFilter || s.classId === clsFilter) && (!q || s.username.includes(q) || s.name.includes(q)));
   const pastedRows = mode === "paste" ? parsePasted(paste) : [];
 
   return (
@@ -85,7 +90,7 @@ export function StudentsClient({ className, students, totalModules }: { classNam
       <div className="flex flex-wrap items-start gap-4">
         <div className="flex-1">
           <h1 className="text-2xl font-bold">学生管理</h1>
-          <p className="mt-1 text-slate-500">{className} · 共 {students.length} 人</p>
+          <p className="mt-1 text-slate-500">{className} · {classes.length} 个班 · 共 {students.length} 人</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" hidden onChange={(e) => { if (e.target.files?.[0]) onFile(e.target.files[0]); e.target.value = ""; }} />
@@ -103,9 +108,50 @@ export function StudentsClient({ className, students, totalModules }: { classNam
           >
             全班密码重置为学号
           </button>
+          {classes.length > 1 && (
+            <select className="select w-auto py-1.5 text-sm" value={target} onChange={(e) => setTarget(e.target.value)} title="导入到哪个班">
+              {classes.map((c) => <option key={c.id} value={c.id}>导入到：{c.name}</option>)}
+            </select>
+          )}
           <button className="btn-outline" onClick={() => setMode(mode === "paste" ? null : "paste")}>粘贴名单</button>
           <button className="btn-primary" onClick={() => fileRef.current?.click()}>导入 Excel 名单</button>
         </div>
+      </div>
+
+      <div className="card space-y-3 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {[{ id: "", name: "全部" }, ...classes].map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setClsFilter(c.id)}
+              className={`rounded-full px-3 py-1 text-sm font-medium ${clsFilter === c.id ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+            >
+              {c.name} {students.filter((s) => !c.id || s.classId === c.id).length}
+            </button>
+          ))}
+          <button className="btn-ghost ml-auto px-2 py-1 text-xs" onClick={() => setManage(!manage)}>{manage ? "收起班级管理" : "班级管理"}</button>
+        </div>
+        {manage && (
+          <div className="space-y-2 border-t border-slate-100 pt-3 text-sm">
+            {classes.map((c) => (
+              <ClassRow key={c.id} c={c} count={students.filter((s) => s.classId === c.id).length} last={classes.length <= 1} onMsg={(m) => setResult({ message: m, skipped: [] })} />
+            ))}
+            <form
+              className="flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                start(async () => {
+                  const r = await createClass(newName);
+                  if (r.error) alert(r.error);
+                  else setNewName("");
+                });
+              }}
+            >
+              <input className="input max-w-xs py-1.5" placeholder="新班级名称，例如：物流2401班" value={newName} onChange={(e) => setNewName(e.target.value)} />
+              <button className="btn-primary px-3 py-1.5" disabled={pending || !newName.trim()}>新建班级</button>
+            </form>
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-[1fr_auto]">
@@ -182,6 +228,7 @@ export function StudentsClient({ className, students, totalModules }: { classNam
             <tr>
               <th className="px-4 py-2.5 font-medium">学号</th>
               <th className="px-4 py-2.5 font-medium">姓名</th>
+              {classes.length > 1 && <th className="px-4 py-2.5 font-medium">班级</th>}
               <th className="px-4 py-2.5 font-medium">学习进度</th>
               <th className="px-4 py-2.5 font-medium">最近登录</th>
               <th className="px-4 py-2.5" />
@@ -189,10 +236,10 @@ export function StudentsClient({ className, students, totalModules }: { classNam
           </thead>
           <tbody className="divide-y divide-slate-100">
             {list.map((s) => (
-              <StudentRowView key={s.id} s={s} total={totalModules} onReset={() => setResult({ message: `已将 ${s.name} 的密码重置为学号 ${s.username}。`, skipped: [] })} />
+              <StudentRowView key={s.id} s={s} classes={classes} total={totalModules} onReset={() => setResult({ message: `已将 ${s.name} 的密码重置为学号 ${s.username}。`, skipped: [] })} />
             ))}
             {list.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-400">{students.length ? "没有匹配的学生" : "还没有学生，先导入名单吧"}</td></tr>
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{students.length ? "没有匹配的学生" : "还没有学生，先导入名单吧"}</td></tr>
             )}
           </tbody>
         </table>
@@ -201,7 +248,7 @@ export function StudentsClient({ className, students, totalModules }: { classNam
   );
 }
 
-function StudentRowView({ s, total, onReset }: { s: S; total: number; onReset: () => void }) {
+function StudentRowView({ s, classes, total, onReset }: { s: S; classes: C[]; total: number; onReset: () => void }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(s.name);
   const [pending, start] = useTransition();
@@ -219,6 +266,18 @@ function StudentRowView({ s, total, onReset }: { s: S; total: number; onReset: (
           s.name
         )}
       </td>
+      {classes.length > 1 && (
+        <td className="px-4 py-2.5">
+          <select
+            className="select w-auto py-1 text-sm"
+            value={s.classId}
+            disabled={pending}
+            onChange={(e) => start(() => moveStudent(s.id, e.target.value))}
+          >
+            {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </td>
+      )}
       <td className="px-4 py-2.5">
         <div className="flex items-center gap-2">
           <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100">
@@ -247,5 +306,27 @@ function StudentRowView({ s, total, onReset }: { s: S; total: number; onReset: (
         </button>
       </td>
     </tr>
+  );
+}
+
+function ClassRow({ c, count, last, onMsg }: { c: C; count: number; last: boolean; onMsg: (m: string) => void }) {
+  const [name, setName] = useState(c.name);
+  const [pending, start] = useTransition();
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <input className="input max-w-xs py-1.5" value={name} onChange={(e) => setName(e.target.value)} />
+      <span className="text-slate-400">{count} 人</span>
+      <button className="btn-outline px-2 py-1" disabled={pending || !name.trim() || name === c.name} onClick={() => start(async () => { await renameClass(c.id, name); onMsg(`班级已改名为“${name.trim()}”。`); })}>
+        改名
+      </button>
+      <button
+        className="btn-danger px-2 py-1"
+        disabled={pending || last}
+        title={last ? "至少保留一个班级" : count ? "班里还有学生，需先移走" : ""}
+        onClick={() => confirm(`删除班级“${c.name}”？`) && start(async () => { const r = await deleteClass(c.id); if (r?.error) alert(r.error); })}
+      >
+        删除
+      </button>
+    </div>
   );
 }
