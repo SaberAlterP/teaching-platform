@@ -1,6 +1,6 @@
 {
-  "id": "bb3f52ee-1c37-4677-9741-113fd0783b5e",
-  "prevId": "59efc341-7acb-4c66-870f-0417a5dd3ec3",
+  "id": "26f718b5-e295-4896-90c4-68a9b0ef3a69",
+  "prevId": "bb3f52ee-1c37-4677-9741-113fd0783b5e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1556,6 +1556,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "''"
+        },
+        "onboarded": {
+          "name": "onboarded",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "created_at": {
           "name": "created_at",

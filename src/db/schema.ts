@@ -174,6 +174,20 @@ export const aiGlobalSettings = pgTable("ai_global_settings", {
   updatedAt: updatedAt(),
 });
 
+// 老师给某门课发的公告：该课的学生在首页看到；置顶的排在前面
+export const announcements = pgTable(
+  "announcements",
+  {
+    id: id(),
+    courseId: text("course_id").notNull().references(() => courses.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    body: text("body").notNull().default(""),
+    pinned: boolean("pinned").notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [index("announcements_course_idx").on(t.courseId, t.createdAt)],
+);
+
 // 全站设置（单行）：老师自助注册的开放方式 approval 需批准 / open 直接开通 / closed 关闭
 export const siteSettings = pgTable("site_settings", {
   id: text("id").primaryKey().default("global"),
