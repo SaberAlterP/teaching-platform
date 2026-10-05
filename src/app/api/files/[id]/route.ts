@@ -3,12 +3,12 @@ import fs from "fs";
 import { Readable } from "stream";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
-import { getSession } from "@/lib/auth";
+import { getApiUser } from "@/lib/auth";
 import { assetDir } from "@/lib/storage";
 
 // 普通文件下载（需登录）。支持 Range 请求，视频可以拖动进度条。
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await getSession())) return new Response("未登录", { status: 401 });
+  if (!(await getApiUser())) return new Response("未登录", { status: 401 });
   const { id } = await params;
   const asset = await db.query.assets.findFirst({ where: eq(schema.assets.id, id) });
   if (!asset || asset.kind !== "file") return new Response("Not found", { status: 404 });

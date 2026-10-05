@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getApiUser } from "@/lib/auth";
 import { MAX_FILE, MAX_PACKAGE, saveFile, savePackage } from "@/lib/storage";
 
 // 老师上传文件：kind=file（图片/视频）或 kind=package（HTML 包）
 // 请求体就是文件本身（不是表单），边收边写硬盘，大视频也不会占满内存。
 // 文件名放在 ?name= 里，类型放在 Content-Type 里。
 export async function POST(req: Request) {
-  const s = await getSession();
-  if (!s || s.role !== "TEACHER") return NextResponse.json({ error: "无权限" }, { status: 403 });
+  if (!(await getApiUser("TEACHER"))) return NextResponse.json({ error: "无权限" }, { status: 403 });
   const url = new URL(req.url);
   const kind = url.searchParams.get("kind") === "package" ? "package" : "file";
   const filename = (url.searchParams.get("name") ?? "").trim().slice(0, 200) || "未命名";

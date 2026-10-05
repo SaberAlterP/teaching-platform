@@ -77,6 +77,7 @@ export function HtmlFrame({
       <iframe
         ref={frame}
         src={src}
+        title="互动内容"
         onLoad={() => setLoaded(true)}
         // 全屏时铺满屏幕；平时按宽屏比例尽量占满一屏（至少是老师设置的高度），但不超过窗口高度
         style={full ? { height: "100%" } : { height: `max(${height}px, min(56vw, 100vh - 160px))`, maxHeight: "calc(100vh - 110px)" }}
@@ -89,6 +90,7 @@ export function HtmlFrame({
       <button
         type="button"
         onClick={toggleFull}
+        aria-label={full ? "退出全屏" : "全屏"}
         className="absolute right-2 bottom-2 rounded-md bg-black/60 px-2.5 py-1.5 text-sm text-white opacity-70 hover:opacity-100"
       >
         {full ? "✕ 退出全屏" : "⛶ 全屏"}

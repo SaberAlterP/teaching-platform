@@ -31,6 +31,8 @@ export const users = pgTable("users", {
   approved: boolean("approved").notNull().default(true),
   theme: text("theme").notNull().default(""), // 教师工作台主题，空 = 默认
   onboarded: boolean("onboarded").notNull().default(false), // 老师是否已看过新手引导
+  // 登录令牌版本：改密码、被重置密码时加 1，之前签发的令牌全部失效（其他设备上的登录被踢下线）
+  sessionVersion: integer("session_version").notNull().default(0),
   createdAt: createdAt(),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
 });

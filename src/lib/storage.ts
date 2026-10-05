@@ -90,6 +90,8 @@ export async function savePackage(body: ReadableStream<Uint8Array>, filename: st
     const htmls = entries.map((x) => x.rel).filter((r) => /\.html?$/i.test(r));
     const entry = htmls.find((r) => r.toLowerCase() === "index.html") ?? htmls.sort((a, b) => a.length - b.length)[0];
     if (!entry) throw new Error("zip 包里没有找到 html 文件");
+    // 先按 zip 目录里记录的解压后大小检查一遍，避免把一个巨大的文件整个解压进内存后才发现超限
+    if (declaredUnzippedSize(entries.map((x) => zip.files[x.n])) > MAX_UNZIPPED) throw new Error("zip 解压后太大（超过 500MB）");
 
     const row = await insertPackage(filename, size, entry);
     dir = assetDir(row.id);
@@ -141,6 +143,16 @@ export async function cleanupOrphanAssets() {
     await fs.rm(assetDir(a.id), { recursive: true, force: true });
   }
   return orphans.length;
+}
+
+// zip 目录里记录的解压后总大小（JSZip 没有公开这个字段；读不到时按 0 算，解压时还有逐个文件的累计检查兜底）
+export function declaredUnzippedSize(files: JSZip.JSZipObject[]) {
+  let total = 0;
+  for (const f of files) {
+    const n = (f as unknown as { _data?: { uncompressedSize?: unknown } })._data?.uncompressedSize;
+    if (typeof n === "number" && n > 0) total += n;
+  }
+  return total;
 }
 
 function commonPrefix(names: string[]) {

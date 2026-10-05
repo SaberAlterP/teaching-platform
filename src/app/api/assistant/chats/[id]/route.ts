@@ -1,21 +1,21 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
-import { getSession } from "@/lib/auth";
+import { getApiUser } from "@/lib/auth";
 import { getJobMessages, getLive, isRunning, markWatched, type StoredMessage } from "@/lib/ai/agent";
 import { viewItems } from "@/lib/ai/view";
 import { listDrafts } from "@/lib/ai/workspace";
 
 // AI 助手页面每秒轮询：返回 from 之后的新消息（转换成显示条目）、运行状态、正在生成的内容、草稿文件列表
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const s = await getSession();
-  if (!s || s.role !== "TEACHER") return NextResponse.json({ error: "无权限" }, { status: 403 });
+  const u = await getApiUser("TEACHER");
+  if (!u) return NextResponse.json({ error: "无权限" }, { status: 403 });
   const { id } = await params;
   const c = schema.aiChats;
   const [chat] = await db
     .select({ id: c.id, title: c.title, status: c.status, error: c.error, pending: c.pending, usage: c.usage })
     .from(c)
-    .where(and(eq(c.id, id), eq(c.teacherId, s.uid)));
+    .where(and(eq(c.id, id), eq(c.teacherId, u.id)));
   if (!chat) return NextResponse.json({ error: "对话不存在" }, { status: 404 });
   const url = new URL(req.url);
   // watch=0：界面收起了，看不到动画预览，AI 检查草稿时不用等它

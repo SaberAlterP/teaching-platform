@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import * as XLSX from "xlsx";
 
 type Item = { id: string; label: string; lesson: string; max: number };
 type Row = { id: string; name: string; username: string; scores: (number | null)[]; total: number };
@@ -9,7 +8,9 @@ export function Gradebook({ items, rows, totalMax, suffix = "" }: { items: Item[
   const [sort, setSort] = useState<"username" | "total">("username");
   const sorted = [...rows].sort((a, b) => (sort === "total" ? b.total - a.total : a.username.localeCompare(b.username)));
 
-  function exportXlsx() {
+  async function exportXlsx() {
+    // xlsx 库很大（几百 KB），用到时才加载，页面打开更快
+    const XLSX = await import("xlsx");
     const data = sorted.map((r) => {
       const o: Record<string, string | number> = { 学号: r.username, 姓名: r.name };
       items.forEach((it, i) => (o[`${it.label}（${it.max}）`] = r.scores[i] ?? ""));

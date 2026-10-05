@@ -1,4 +1,4 @@
-import { getSession } from "@/lib/auth";
+import { getApiUser } from "@/lib/auth";
 import { ownChat } from "@/lib/ai/chats";
 import { readDraft } from "@/lib/ai/workspace";
 
@@ -11,12 +11,12 @@ var ce=console.error;console.error=function(){add("console.error："+[].map.call
 setTimeout(function(){parent.postMessage({type:"tp:preview-report",errors:E},"*")},4000)})();</script>`.replace(/\n/g, "");
 
 export async function GET(_req: Request, { params }: { params: Promise<{ chat: string; file: string }> }) {
-  const s = await getSession();
-  if (!s || s.role !== "TEACHER") return new Response("无权限", { status: 403 });
+  const u = await getApiUser("TEACHER");
+  if (!u) return new Response("无权限", { status: 403 });
   const { chat, file } = await params;
   let html: string;
   try {
-    await ownChat(s.uid, chat);
+    await ownChat(u.id, chat);
     html = await readDraft(chat, decodeURIComponent(file));
   } catch (e) {
     return new Response((e as Error).message, { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });

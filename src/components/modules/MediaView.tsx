@@ -8,7 +8,7 @@ export function MediaView({ data }: { data: MediaData }) {
         <video src={data.src} controls preload="metadata" className="w-full rounded-lg bg-black" />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={data.src} alt={data.caption ?? ""} className="mx-auto max-h-[70vh] rounded-lg" loading="lazy" />
+        <img src={data.src} alt={data.caption ?? ""} className="mx-auto max-h-[70vh] rounded-lg" loading="lazy" decoding="async" />
       )}
       {data.caption && <figcaption className="mt-2 text-center text-sm text-slate-500">{data.caption}</figcaption>}
     </figure>

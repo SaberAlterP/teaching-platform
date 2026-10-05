@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useRef, useState, useTransition } from "react";
-import * as XLSX from "xlsx";
 import QRCode from "qrcode";
 import { createClass, deleteClass, deleteStudent, importStudents, moveStudent, renameClass, resetClassPasswords, resetStudentPassword, updateStudent, type StudentRow } from "../actions";
 
@@ -57,6 +56,8 @@ export function StudentsClient({ className, classes, students, totalModules }: {
   }, []);
 
   async function onFile(f: File) {
+    // xlsx 库很大（几百 KB），用到时才加载，页面打开更快
+    const XLSX = await import("xlsx");
     const wb = XLSX.read(await f.arrayBuffer());
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: "" });
     const picked = pickRows(rows);
@@ -75,7 +76,8 @@ export function StudentsClient({ className, classes, students, totalModules }: {
     });
   }
 
-  function downloadTemplate() {
+  async function downloadTemplate() {
+    const XLSX = await import("xlsx");
     const ws = XLSX.utils.aoa_to_sheet([["学号", "姓名"], ["2024001", "张三"], ["2024002", "李四"]]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "学生名单");
@@ -99,10 +101,14 @@ export function StudentsClient({ className, classes, students, totalModules }: {
             className="btn-outline"
             disabled={pending || students.length === 0}
             onClick={() =>
-              confirm(`把本班 ${students.length} 名学生的密码全部重置为各自的学号？\n学生自己改过的密码也会被覆盖。`) &&
+              confirm(`把本班 ${students.length} 名学生的密码全部重置为各自的学号？\n学生自己改过的密码也会被覆盖，已登录的设备会退出。`) &&
               start(async () => {
-                const n = await resetClassPasswords();
-                setResult({ message: `已将 ${n} 名学生的密码重置为学号。`, skipped: [] });
+                const r = await resetClassPasswords();
+                setResult({
+                  message: `已将 ${r.reset} 名学生的密码重置为学号。` +
+                    (r.skipped ? `另有 ${r.skipped} 名学生也在其他老师的课程里，没有重置，请让他们自己修改或联系管理员。` : ""),
+                  skipped: [],
+                });
               })
             }
           >
@@ -160,7 +166,7 @@ export function StudentsClient({ className, classes, students, totalModules }: {
           <ol className="list-decimal space-y-1 pl-5">
             <li>导入名单后，系统为每个学生生成账号：<b>账号和初始密码都是学号</b>，不需要再发密码。</li>
             <li>学生扫右侧二维码或打开 <code className="rounded bg-slate-100 px-1">{origin}</code> 登录。</li>
-            <li>学生登录后可以在右上角“改密码”自行修改；忘记密码时，在下表点“重置密码”即可恢复成学号。</li>
+            <li>学生密码还是学号时，登录后页面顶部会提醒他改密码（不强制）；忘记密码时，在下表点“重置密码”即可恢复成学号。</li>
           </ol>
         </div>
         {qr && (
@@ -260,7 +266,7 @@ function StudentRowView({ s, classes, total, onReset }: { s: S; classes: C[]; to
         {editing ? (
           <span className="flex gap-1">
             <input className="input w-32 py-1" value={name} onChange={(e) => setName(e.target.value)} />
-            <button className="btn-primary px-2 py-1" onClick={() => start(async () => { await updateStudent(s.id, name); setEditing(false); })}>保存</button>
+            <button className="btn-primary px-2 py-1" onClick={() => start(async () => { const r = await updateStudent(s.id, name); if (r.error) alert(r.error); else setEditing(false); })}>保存</button>
           </span>
         ) : (
           s.name
@@ -294,7 +300,7 @@ function StudentRowView({ s, classes, total, onReset }: { s: S; classes: C[]; to
         <button
           className="btn-ghost px-2 py-1"
           disabled={pending}
-          onClick={() => confirm(`把 ${s.name} 的密码重置为学号 ${s.username}？`) && start(async () => { await resetStudentPassword(s.id); onReset(); })}
+          onClick={() => confirm(`把 ${s.name} 的密码重置为学号 ${s.username}？\n已登录的设备会退出，学生用学号重新登录。`) && start(async () => { const r = await resetStudentPassword(s.id); if (r.error) alert(r.error); else onReset(); })}
         >
           重置密码
         </button>

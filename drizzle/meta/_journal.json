@@ -64,6 +64,13 @@
       "when": 1791007363093,
       "tag": "0008_teacher_onboarding",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791210451302,
+      "tag": "0009_session_version",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@ import { db, schema } from "@/db";
 import { requireStudent } from "@/lib/auth";
 import { studentCanSeeLesson } from "@/lib/course";
 import { gradeQuiz, type HtmlData, type QuizData } from "@/lib/modules";
+import { isPlainObject } from "@/lib/input";
 
 async function loadModule(moduleId: string, userId: string) {
   const m = await db.query.modules.findFirst({ where: eq(schema.modules.id, moduleId) });
@@ -43,6 +44,7 @@ export async function submitQuiz(moduleId: string, answers: Record<string, unkno
     return { error: (e as Error).message } as QuizResult;
   }
   if (m.type !== "QUIZ") return { error: "不是习题模块" } as QuizResult;
+  if (!isPlainObject(answers)) return { error: "提交的数据格式不对" } as QuizResult;
   const quiz = m.data as unknown as QuizData;
 
   const existing = await db.query.submissions.findFirst({
