@@ -4,13 +4,12 @@ import { Readable } from "stream";
 import JSZip from "jszip";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
-import { getSession } from "@/lib/auth";
+import { getApiUser } from "@/lib/auth";
 import { assetDir } from "@/lib/storage";
 
 // 老师下载 HTML 包：单个 html 原样下载；zip 包把解压后的文件重新打包成 zip
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const s = await getSession();
-  if (!s || s.role !== "TEACHER") return new Response("无权限", { status: 403 });
+  if (!(await getApiUser("TEACHER"))) return new Response("无权限", { status: 403 });
   const { id } = await params;
   const asset = await db.query.assets.findFirst({ where: eq(schema.assets.id, id) });
   if (!asset || asset.kind !== "package") return new Response("Not found", { status: 404 });

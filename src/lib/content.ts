@@ -13,8 +13,13 @@ export async function writeOrder(ids: string[]) {
   });
 }
 
-// 清理不再使用的上传文件；出错也不影响老师当前的操作
+// 清理不再使用的上传文件；出错也不影响老师当前的操作。
+// 清理要把全部模块内容读一遍，内容多了很慢：每 10 分钟最多做一次（只删上传超过 1 小时的文件，晚一点删没有影响）。
+const CLEANUP_EVERY = 10 * 60 * 1000;
+const g = globalThis as unknown as { __tpCleanupAt?: number };
 export async function cleanupFiles() {
+  if (Date.now() - (g.__tpCleanupAt ?? 0) < CLEANUP_EVERY) return;
+  g.__tpCleanupAt = Date.now();
   try {
     await cleanupOrphanAssets();
   } catch (e) {
