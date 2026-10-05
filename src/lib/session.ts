@@ -9,6 +9,7 @@ export type SessionPayload = {
   role: "TEACHER" | "STUDENT";
   name: string;
   mcp: boolean; // mustChangePassword
+  wp?: boolean; // 学生的密码还是学号（只在登录那一刻知道），学习页顶部提示修改，不强制
   sv?: number; // 令牌版本，和 users.session_version 不一致就作废（旧令牌没有这个字段，按 0 算）
 };
 

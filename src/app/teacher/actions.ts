@@ -328,7 +328,7 @@ export async function importStudents(rows: StudentRow[], classId?: string) {
   return { created, skipped };
 }
 
-// 把某个学生的密码重置为学号。学生下次用学号登录时会被要求改密码；已登录的设备会被踢下线。
+// 把某个学生的密码重置为学号。已登录的设备会被踢下线；学生用学号登录后会看到改密码提醒。
 export async function resetStudentPassword(userId: string): Promise<{ error: string }> {
   const t = await requireTeacher();
   try {

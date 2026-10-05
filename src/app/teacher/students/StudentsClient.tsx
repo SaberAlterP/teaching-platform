@@ -101,7 +101,7 @@ export function StudentsClient({ className, classes, students, totalModules }: {
             className="btn-outline"
             disabled={pending || students.length === 0}
             onClick={() =>
-              confirm(`把本班 ${students.length} 名学生的密码全部重置为各自的学号？\n学生自己改过的密码也会被覆盖，下次登录时会要求他们重新设置密码。`) &&
+              confirm(`把本班 ${students.length} 名学生的密码全部重置为各自的学号？\n学生自己改过的密码也会被覆盖，已登录的设备会退出。`) &&
               start(async () => {
                 const r = await resetClassPasswords();
                 setResult({
@@ -166,7 +166,7 @@ export function StudentsClient({ className, classes, students, totalModules }: {
           <ol className="list-decimal space-y-1 pl-5">
             <li>导入名单后，系统为每个学生生成账号：<b>账号和初始密码都是学号</b>，不需要再发密码。</li>
             <li>学生扫右侧二维码或打开 <code className="rounded bg-slate-100 px-1">{origin}</code> 登录。</li>
-            <li>学生第一次用学号登录时，会被要求设置自己的新密码；忘记密码时，在下表点“重置密码”即可恢复成学号，学生再登录时重新设置。</li>
+            <li>学生密码还是学号时，登录后页面顶部会提醒他改密码（不强制）；忘记密码时，在下表点“重置密码”即可恢复成学号。</li>
           </ol>
         </div>
         {qr && (
@@ -300,7 +300,7 @@ function StudentRowView({ s, classes, total, onReset }: { s: S; classes: C[]; to
         <button
           className="btn-ghost px-2 py-1"
           disabled={pending}
-          onClick={() => confirm(`把 ${s.name} 的密码重置为学号 ${s.username}？\n学生下次登录时会被要求重新设置密码。`) && start(async () => { const r = await resetStudentPassword(s.id); if (r.error) alert(r.error); else onReset(); })}
+          onClick={() => confirm(`把 ${s.name} 的密码重置为学号 ${s.username}？\n已登录的设备会退出，学生用学号重新登录。`) && start(async () => { const r = await resetStudentPassword(s.id); if (r.error) alert(r.error); else onReset(); })}
         >
           重置密码
         </button>

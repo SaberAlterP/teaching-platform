@@ -40,7 +40,7 @@ export async function loginAction(_: { error: string }, fd: FormData) {
   await db.update(schema.users).set({ lastLoginAt: new Date() }).where(eq(schema.users.id, user.id));
   const weak = isDefaultStudentPassword(user, password);
   await startSession(user, weak);
-  redirect(mustChangeNow(user) || weak ? "/account/password" : user.role === "TEACHER" ? "/teacher" : "/learn");
+  redirect(mustChangeNow(user) ? "/account/password" : user.role === "TEACHER" ? "/teacher" : "/learn");
 }
 
 export async function logoutAction() {

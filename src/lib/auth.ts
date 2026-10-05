@@ -71,20 +71,23 @@ export async function requireStudent() {
 // 教师账号仍在用默认密码时要求首次登录改密码（学生是否要改见下面的 isDefaultStudentPassword）
 export const mustChangeNow = (u: schema.User) => u.role === "TEACHER" && u.mustChangePassword;
 
-// 学生的密码还是学号（初始密码或被老师重置过）：别人知道学号就能登录，要求先改密码
+// 学生的密码还是学号（初始密码或被老师重置过）：别人知道学号就能登录，学习页会提示修改（不强制）
 export const isDefaultStudentPassword = (u: schema.User, password: string) => u.role === "STUDENT" && password === u.username;
+export const PW_TIP_COOKIE = "tp_pwtip"; // 学生点了“以后再说”，这次登录不再提示
 
-// weakPassword：登录时发现密码还是默认的（只有登录那一刻知道明文），这次登录必须先改密码
+// weakPassword：登录时发现密码还是学号（只有登录那一刻知道明文），写进令牌，学习页据此提示
 export async function startSession(user: schema.User, weakPassword = false) {
   const token = await signSession({
     uid: user.id,
     role: user.role,
     name: user.name,
-    mcp: mustChangeNow(user) || weakPassword,
+    mcp: mustChangeNow(user),
+    ...(weakPassword ? { wp: true } : {}),
     sv: user.sessionVersion,
   });
   const c = await cookies();
   c.set(SESSION_COOKIE, token, cookieOptions);
+  c.delete(PW_TIP_COOKIE); // 每次登录重新提示
   // 主题跟着账号走：登录时写入 Cookie（页面据此换色，登录页也有同样的外观）
   if (user.theme && isTheme(user.theme))
     c.set(THEME_COOKIE, user.theme, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
