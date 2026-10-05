@@ -1,10 +1,11 @@
 "use client";
-import * as XLSX from "xlsx";
 
 type Row = { key: string; where: string; no: number; type: string; prompt: string; answered: number; rate: number | null };
 
 export function QuestionTable({ rows, studentCount, weakest }: { rows: Row[]; studentCount: number; weakest: string[] }) {
-  function exportXlsx() {
+  async function exportXlsx() {
+    // xlsx 库很大（几百 KB），用到时才加载，页面打开更快
+    const XLSX = await import("xlsx");
     const data = rows.map((q) => ({
       位置: q.where,
       题号: q.no,
