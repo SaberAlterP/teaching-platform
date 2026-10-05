@@ -1,4 +1,4 @@
-import { asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireTeacher } from "@/lib/auth";
 import { getTeacherCourse } from "@/lib/course";
@@ -45,15 +45,13 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
         .orderBy(asc(schema.modules.order))
     : [];
   const mids = mods.map((m) => m.id);
-  const subs = mids.length && sids.length
-    ? await db.select().from(schema.submissions).where(inArray(schema.submissions.moduleId, mids))
+  // 只查当前筛选的学生（选了某个班时，不用把全课程的作答都读出来）
+  const mySubs = mids.length && sids.length
+    ? await db.select().from(schema.submissions).where(and(inArray(schema.submissions.moduleId, mids), inArray(schema.submissions.userId, sids)))
     : [];
-  const prog = mids.length && sids.length
-    ? await db.select().from(schema.moduleProgress).where(inArray(schema.moduleProgress.moduleId, mids))
+  const myProg = mids.length && sids.length
+    ? await db.select().from(schema.moduleProgress).where(and(inArray(schema.moduleProgress.moduleId, mids), inArray(schema.moduleProgress.userId, sids)))
     : [];
-  const sidSet = new Set(sids);
-  const mySubs = subs.filter((s) => sidSet.has(s.userId));
-  const myProg = prog.filter((p) => sidSet.has(p.userId));
 
   // ---- 计分项（习题 + 计分 HTML）----
   const lessonIndex = new Map(lessons.map((l, i) => [l.id, i]));

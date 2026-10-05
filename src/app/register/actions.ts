@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { eq, or } from "drizzle-orm";
 import { db, schema } from "@/db";
-import { hashPassword, startSession } from "@/lib/auth";
+import { hashPassword, pruneExpired, startSession } from "@/lib/auth";
 import { getSignupMode } from "@/lib/site";
 
 // 简单限流：同一来源 1 小时内最多注册 5 次（内存级，单实例够用）
@@ -45,6 +45,7 @@ export async function registerAction(_: RegisterState, fd: FormData): Promise<Re
     .insert(schema.users)
     .values({ username, name, email, passwordHash: await hashPassword(password), role: "TEACHER", mustChangePassword: false, approved })
     .returning();
+  pruneExpired(tries, (x) => x.until);
   tries.set(ip, t && t.until > Date.now() ? { n: t.n + 1, until: t.until } : { n: 1, until: Date.now() + 3600_000 });
 
   if (!approved) redirect("/login?registered=pending");
