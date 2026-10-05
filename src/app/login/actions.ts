@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { eq, or } from "drizzle-orm";
 import { db, schema } from "@/db";
 import {
-  checkPassword, clearLoginFailures, endSession, loginBlocked, mustChangeNow, recordLoginFailure, startSession,
+  checkPassword, clearLoginFailures, endSession, isDefaultStudentPassword, loginBlocked, mustChangeNow, recordLoginFailure, startSession,
 } from "@/lib/auth";
 
 export async function loginAction(_: { error: string }, fd: FormData) {
@@ -16,8 +16,10 @@ export async function loginAction(_: { error: string }, fd: FormData) {
     ? (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? "direct"
     : "direct";
   const key = `${ip}:${username}`;
+  // 拿不到真实 IP 时（"direct"）所有人共用一个来源，不能按 IP 锁，否则一个人输错就把全校锁在外面
+  const keys = ip === "direct" ? [key] : [key, `ip:${ip}`];
 
-  const wait = loginBlocked(key);
+  const wait = loginBlocked(...keys);
   if (wait) return { error: `尝试次数过多，请 ${wait} 分钟后再试` };
 
   // 老师可以用邮箱登录
@@ -27,7 +29,7 @@ export async function loginAction(_: { error: string }, fd: FormData) {
       : eq(schema.users.username, username),
   });
   if (!user || !(await checkPassword(password, user.passwordHash))) {
-    recordLoginFailure(key);
+    recordLoginFailure(...keys);
     return { error: "账号或密码错误" };
   }
   // 密码对了才提示身份不符，避免被人拿来探测账号
@@ -36,8 +38,9 @@ export async function loginAction(_: { error: string }, fd: FormData) {
   if (!user.approved) return { error: "账号还在等待管理员批准，批准后就能登录了" };
   clearLoginFailures(key);
   await db.update(schema.users).set({ lastLoginAt: new Date() }).where(eq(schema.users.id, user.id));
-  await startSession(user);
-  redirect(mustChangeNow(user) ? "/account/password" : user.role === "TEACHER" ? "/teacher" : "/learn");
+  const weak = isDefaultStudentPassword(user, password);
+  await startSession(user, weak);
+  redirect(mustChangeNow(user) || weak ? "/account/password" : user.role === "TEACHER" ? "/teacher" : "/learn");
 }
 
 export async function logoutAction() {

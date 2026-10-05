@@ -1,14 +1,14 @@
 import { asc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
-import { getSession } from "@/lib/auth";
+import { getApiUser } from "@/lib/auth";
 import { assertLessonOwner } from "@/lib/course";
 
 // 导出课时为 JSON（备份、复制到别的课程，或交给 AI 修改后再导入）
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const s = await getSession();
-  if (!s || s.role !== "TEACHER") return new Response("无权限", { status: 403 });
+  const u = await getApiUser("TEACHER");
+  if (!u) return new Response("无权限", { status: 403 });
   const { id } = await params;
-  const lesson = await assertLessonOwner(id, s.uid).catch(() => null);
+  const lesson = await assertLessonOwner(id, u.id).catch(() => null);
   if (!lesson) return new Response("Not found", { status: 404 });
   const mods = await db.query.modules.findMany({ where: eq(schema.modules.lessonId, id), orderBy: asc(schema.modules.order) });
   const body = {

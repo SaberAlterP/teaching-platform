@@ -9,6 +9,7 @@ export type SessionPayload = {
   role: "TEACHER" | "STUDENT";
   name: string;
   mcp: boolean; // mustChangePassword
+  sv?: number; // 令牌版本，和 users.session_version 不一致就作废（旧令牌没有这个字段，按 0 算）
 };
 
 function key() {

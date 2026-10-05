@@ -16,12 +16,36 @@ export async function getSession(): Promise<SessionPayload | null> {
 // 同一次页面渲染里 layout 和 page 都要查用户，用 cache 合并成一次数据库查询
 const findUser = cache((uid: string) => db.query.users.findFirst({ where: eq(schema.users.id, uid) }));
 
+// 令牌签名有效还不够：用户可能已被删除，或改过密码（旧令牌作废）
+async function userFromSession(s: SessionPayload | null) {
+  if (!s) return null;
+  const user = await findUser(s.uid);
+  if (!user || user.sessionVersion !== (s.sv ?? 0)) return null;
+  return user;
+}
+
 export async function requireUser() {
   const s = await getSession();
-  if (!s) redirect("/login");
-  // 令牌有效但用户可能已被删除
-  const user = await findUser(s.uid);
-  if (!user) redirect("/login");
+  const user = await userFromSession(s);
+  if (!user) {
+    // 令牌已作废要先清掉，否则中间件看到“有效”令牌又把人送回来。
+    // Server Action 里可以直接删 Cookie；页面渲染时不允许改 Cookie（会抛错），就跳到专门清令牌的路由
+    if (s) {
+      try {
+        (await cookies()).delete(SESSION_COOKIE);
+      } catch {
+        redirect("/api/auth/expired");
+      }
+    }
+    redirect("/login");
+  }
+  return user;
+}
+
+// 给 /api 路由用：和 requireUser 一样查数据库，但不跳转，无效时返回 null（由路由返回 401/403）
+export async function getApiUser(role?: "TEACHER" | "STUDENT") {
+  const user = await userFromSession(await getSession());
+  if (!user || (role && user.role !== role)) return null;
   return user;
 }
 
@@ -44,15 +68,20 @@ export async function requireStudent() {
   return u;
 }
 
-// 学生不强制改密码（初始密码就是学号）；只有仍在用默认密码的教师账号才要求首次登录改密码
+// 教师账号仍在用默认密码时要求首次登录改密码（学生是否要改见下面的 isDefaultStudentPassword）
 export const mustChangeNow = (u: schema.User) => u.role === "TEACHER" && u.mustChangePassword;
 
-export async function startSession(user: schema.User) {
+// 学生的密码还是学号（初始密码或被老师重置过）：别人知道学号就能登录，要求先改密码
+export const isDefaultStudentPassword = (u: schema.User, password: string) => u.role === "STUDENT" && password === u.username;
+
+// weakPassword：登录时发现密码还是默认的（只有登录那一刻知道明文），这次登录必须先改密码
+export async function startSession(user: schema.User, weakPassword = false) {
   const token = await signSession({
     uid: user.id,
     role: user.role,
     name: user.name,
-    mcp: mustChangeNow(user),
+    mcp: mustChangeNow(user) || weakPassword,
+    sv: user.sessionVersion,
   });
   const c = await cookies();
   c.set(SESSION_COOKIE, token, cookieOptions);
@@ -72,20 +101,38 @@ export const hashPassword = (pw: string) => bcrypt.hash(pw, 10);
 export const checkPassword = (pw: string, hash: string) => bcrypt.compare(pw, hash);
 
 // ---- 简单的登录频率限制（内存级，单实例部署足够）----
+// 两层：同一来源 + 同一账号错 8 次锁 10 分钟；同一 IP（拿得到真实 IP 时）不管换多少账号，错 30 次锁 10 分钟，
+// 防止有人拿“密码 = 学号”挨个学号去试。
 const attempts = new Map<string, { count: number; until: number }>();
 const WINDOW = 10 * 60 * 1000;
 const LIMIT = 8;
+const IP_LIMIT = 30;
 
-export function loginBlocked(key: string): number {
-  const a = attempts.get(key);
-  if (!a || a.until < Date.now()) return 0;
-  return a.count >= LIMIT ? Math.ceil((a.until - Date.now()) / 60000) : 0;
+const limitOf = (key: string) => (key.startsWith("ip:") ? IP_LIMIT : LIMIT);
+
+export function loginBlocked(...keys: string[]): number {
+  let wait = 0;
+  for (const key of keys) {
+    const a = attempts.get(key);
+    if (a && a.until >= Date.now() && a.count >= limitOf(key)) wait = Math.max(wait, Math.ceil((a.until - Date.now()) / 60000));
+  }
+  return wait;
 }
-export function recordLoginFailure(key: string) {
-  const a = attempts.get(key);
-  if (!a || a.until < Date.now()) attempts.set(key, { count: 1, until: Date.now() + WINDOW });
-  else a.count++;
+export function recordLoginFailure(...keys: string[]) {
+  pruneExpired(attempts, (a) => a.until);
+  for (const key of keys) {
+    const a = attempts.get(key);
+    if (!a || a.until < Date.now()) attempts.set(key, { count: 1, until: Date.now() + WINDOW });
+    else a.count++;
+  }
 }
 export function clearLoginFailures(key: string) {
   attempts.delete(key);
+}
+
+// 内存里的限流记录不清理会一直变多：条目多了就顺手删掉过期的
+export function pruneExpired<T>(map: Map<string, T>, until: (v: T) => number) {
+  if (map.size < 1000) return;
+  const now = Date.now();
+  for (const [k, v] of map) if (until(v) < now) map.delete(k);
 }

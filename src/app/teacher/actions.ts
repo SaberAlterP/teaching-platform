@@ -2,13 +2,16 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { and, asc, count, eq, inArray, max } from "drizzle-orm";
+import { and, asc, count, eq, inArray, max, ne, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { hashPassword, requireTeacher } from "@/lib/auth";
 import { COURSE_COOKIE, assertLessonOwner, assertModuleOwner, createCourse, getTeacherCourse, listTeacherCourses } from "@/lib/course";
 import { defaultData, type ModuleType, type QuizData } from "@/lib/modules";
 import { createApiKey } from "@/lib/api-key";
 import { cleanupFiles, regradeSubmissions, validateQuiz, writeOrder } from "@/lib/content";
+import { isLessonStatus, isPlainObject, pickLessonPatch, pickModulePatch, stringArray } from "@/lib/input";
+
+const MODULE_TYPES: ModuleType[] = ["RICHTEXT", "MEDIA", "QUIZ", "HTML"];
 
 // ---------------- 课程 ----------------
 export async function updateCourse(fd: FormData) {
@@ -83,9 +86,12 @@ export async function createLesson(fd: FormData) {
   redirect(`/teacher/lessons/${l.id}`);
 }
 
-export async function updateLesson(lessonId: string, patch: { title?: string; summary?: string; section?: string }) {
+export async function updateLesson(lessonId: string, input: { title?: string; summary?: string; section?: string }) {
   const t = await requireTeacher();
   await assertLessonOwner(lessonId, t.id);
+  // 只取这三项：否则可以顺带传 courseId、status，把课时塞进别人的课程
+  const patch = pickLessonPatch(input);
+  if (!Object.keys(patch).length) return;
   await db.update(schema.lessons).set(patch).where(eq(schema.lessons.id, lessonId));
   revalidatePath("/teacher", "layout");
 }
@@ -93,7 +99,8 @@ export async function updateLesson(lessonId: string, patch: { title?: string; su
 export async function setLessonStatus(lessonId: string, status: "DRAFT" | "OPEN" | "SCHEDULED", openAt?: string | null) {
   const t = await requireTeacher();
   await assertLessonOwner(lessonId, t.id);
-  const at = status === "SCHEDULED" && openAt ? new Date(openAt) : null;
+  if (!isLessonStatus(status)) return { error: "无效的状态" };
+  const at = status === "SCHEDULED" && typeof openAt === "string" && openAt ? new Date(openAt) : null;
   if (status === "SCHEDULED" && (!at || isNaN(at.getTime()))) return { error: "请选择开放时间" };
   await db.update(schema.lessons).set({ status, openAt: at }).where(eq(schema.lessons.id, lessonId));
   revalidatePath("/teacher", "layout");
@@ -104,7 +111,8 @@ export async function setLessonStatus(lessonId: string, status: "DRAFT" | "OPEN"
 export async function setLessonsStatus(ids: string[], status: "DRAFT" | "OPEN") {
   const t = await requireTeacher();
   const { course } = await getTeacherCourse(t.id);
-  if (!ids.length) return;
+  ids = stringArray(ids);
+  if (!ids.length || (status !== "DRAFT" && status !== "OPEN")) return;
   await db
     .update(schema.lessons)
     .set({ status, openAt: null })
@@ -123,6 +131,7 @@ export async function deleteLesson(lessonId: string) {
 export async function reorderLessons(ids: string[]) {
   const t = await requireTeacher();
   const { course } = await getTeacherCourse(t.id);
+  ids = stringArray(ids);
   await db.transaction(async (tx) => {
     for (let i = 0; i < ids.length; i++) {
       await tx
@@ -180,21 +189,22 @@ async function doImportLesson(json: string) {
   } catch {
     throw new Error("文件不是有效的 JSON");
   }
-  if (!Array.isArray(parsed.modules)) throw new Error("文件格式不对：缺少 modules");
-  const valid: ModuleType[] = ["RICHTEXT", "MEDIA", "QUIZ", "HTML"];
+  if (!isPlainObject(parsed) || !Array.isArray(parsed.modules)) throw new Error("文件格式不对：缺少 modules");
+  const text = (v: unknown) => (typeof v === "string" ? v : "");
   const [{ m }] = await db
     .select({ m: max(schema.lessons.order) })
     .from(schema.lessons)
     .where(eq(schema.lessons.courseId, course.id));
   const [l] = await db
     .insert(schema.lessons)
-    .values({ courseId: course.id, title: parsed.title || "导入的课时", summary: parsed.summary ?? "", section: typeof parsed.section === "string" ? parsed.section : "", order: (m ?? -1) + 1 })
+    .values({ courseId: course.id, title: text(parsed.title) || "导入的课时", summary: text(parsed.summary), section: text(parsed.section), order: (m ?? -1) + 1 })
     .returning();
-  const mods = parsed.modules.filter((x) => valid.includes(x.type));
+  const mods = parsed.modules.filter((x) => isPlainObject(x) && MODULE_TYPES.includes(x.type));
   if (mods.length)
     await db.insert(schema.modules).values(
       mods.map((x, i) => ({
-        lessonId: l.id, order: i, type: x.type, title: x.title ?? "", data: x.data as Record<string, unknown>,
+        lessonId: l.id, order: i, type: x.type, title: text(x.title),
+        data: isPlainObject(x.data) ? x.data : (defaultData(x.type) as Record<string, unknown>),
       })),
     );
   revalidatePath("/teacher", "layout");
@@ -205,11 +215,14 @@ async function doImportLesson(json: string) {
 export async function addModule(lessonId: string, type: ModuleType, atIndex?: number) {
   const t = await requireTeacher();
   await assertLessonOwner(lessonId, t.id);
+  if (!MODULE_TYPES.includes(type)) throw new Error("无效的模块类型");
   const existing = await db.query.modules.findMany({
     where: eq(schema.modules.lessonId, lessonId),
     orderBy: (m, { asc }) => asc(m.order),
   });
-  const pos = atIndex ?? existing.length;
+  const pos = typeof atIndex === "number" && Number.isFinite(atIndex)
+    ? Math.max(0, Math.min(existing.length, Math.floor(atIndex)))
+    : existing.length;
   const [mod] = await db
     .insert(schema.modules)
     .values({ lessonId, type, order: pos, title: "", data: defaultData(type) as Record<string, unknown> })
@@ -222,10 +235,13 @@ export async function addModule(lessonId: string, type: ModuleType, atIndex?: nu
   return mod;
 }
 
-export async function updateModule(moduleId: string, patch: { title?: string; data?: Record<string, unknown> }) {
+export async function updateModule(moduleId: string, input: { title?: string; data?: Record<string, unknown> }) {
   const t = await requireTeacher();
   try {
     const m = await assertModuleOwner(moduleId, t.id);
+    // 只取标题和内容：否则可以顺带传 lessonId，把模块挪进别人的课时
+    const patch = pickModulePatch(input);
+    if (!Object.keys(patch).length) return { error: "" };
     if (m.type === "QUIZ" && patch.data) validateQuiz(patch.data as unknown as QuizData);
     await db.update(schema.modules).set(patch).where(eq(schema.modules.id, moduleId));
     if (patch.data) {
@@ -312,41 +328,60 @@ export async function importStudents(rows: StudentRow[], classId?: string) {
   return { created, skipped };
 }
 
-// 把某个学生的密码重置为学号
-export async function resetStudentPassword(userId: string) {
+// 把某个学生的密码重置为学号。学生下次用学号登录时会被要求改密码；已登录的设备会被踢下线。
+export async function resetStudentPassword(userId: string): Promise<{ error: string }> {
   const t = await requireTeacher();
-  await assertStudentInMyClass(userId, t.id);
+  try {
+    await assertStudentInMyClass(userId, t.id);
+    await assertOwnsAccount(userId, t);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
   const u = await db.query.users.findFirst({ where: eq(schema.users.id, userId) });
-  if (!u) throw new Error("学生不存在");
+  if (!u) return { error: "学生不存在" };
   await db
     .update(schema.users)
-    .set({ passwordHash: await hashPassword(u.username), mustChangePassword: false })
+    .set({ passwordHash: await hashPassword(u.username), mustChangePassword: false, sessionVersion: sql`${schema.users.sessionVersion} + 1` })
     .where(eq(schema.users.id, userId));
+  return { error: "" };
 }
 
-// 把本班所有学生的密码重置为各自的学号（学生自己改过的密码也会被覆盖）
+// 把本课程所有学生的密码重置为各自的学号（学生自己改过的密码也会被覆盖）。
+// 同时在其他老师课程里的学生跳过（管理员除外），返回重置人数和跳过人数。
 export async function resetClassPasswords() {
   const t = await requireTeacher();
   const classIds = (await myClasses(t.id)).map((c) => c.id);
   const students = await db
-    .select({ id: schema.users.id, username: schema.users.username })
+    .selectDistinct({ id: schema.users.id, username: schema.users.username })
     .from(schema.users)
     .innerJoin(schema.enrollments, eq(schema.enrollments.userId, schema.users.id))
     .where(and(inArray(schema.enrollments.classId, classIds), eq(schema.users.role, "STUDENT")));
+  const shared = t.isAdmin ? new Set<string>() : await sharedWithOtherTeachers(students.map((s) => s.id), t.id);
+  let reset = 0;
   for (const s of students) {
+    if (shared.has(s.id)) continue;
     await db
       .update(schema.users)
-      .set({ passwordHash: await hashPassword(s.username), mustChangePassword: false })
+      .set({ passwordHash: await hashPassword(s.username), mustChangePassword: false, sessionVersion: sql`${schema.users.sessionVersion} + 1` })
       .where(eq(schema.users.id, s.id));
+    reset++;
   }
-  return students.length;
+  return { reset, skipped: shared.size };
 }
 
-export async function updateStudent(userId: string, name: string) {
+export async function updateStudent(userId: string, name: string): Promise<{ error: string }> {
   const t = await requireTeacher();
-  await assertStudentInMyClass(userId, t.id);
-  await db.update(schema.users).set({ name: name.trim() }).where(eq(schema.users.id, userId));
+  const n = String(name ?? "").trim().slice(0, 50);
+  if (!n) return { error: "请输入姓名" };
+  try {
+    await assertStudentInMyClass(userId, t.id);
+    await assertOwnsAccount(userId, t);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+  await db.update(schema.users).set({ name: n }).where(eq(schema.users.id, userId));
   revalidatePath("/teacher/students");
+  return { error: "" };
 }
 
 // 从本课程移除学生；如果他不再上任何课程，连账号和作答记录一起删除
@@ -363,6 +398,26 @@ export async function deleteStudent(userId: string) {
 async function myClasses(teacherId: string) {
   const { course } = await getTeacherCourse(teacherId);
   return db.query.classes.findMany({ where: eq(schema.classes.courseId, course.id), orderBy: asc(schema.classes.createdAt) });
+}
+
+// 这些学生里，哪些还在别的老师的课程里
+async function sharedWithOtherTeachers(userIds: string[], teacherId: string) {
+  if (!userIds.length) return new Set<string>();
+  const rows = await db
+    .selectDistinct({ userId: schema.enrollments.userId })
+    .from(schema.enrollments)
+    .innerJoin(schema.classes, eq(schema.classes.id, schema.enrollments.classId))
+    .innerJoin(schema.courses, eq(schema.courses.id, schema.classes.courseId))
+    .where(and(inArray(schema.enrollments.userId, userIds), ne(schema.courses.teacherId, teacherId)));
+  return new Set(rows.map((r) => r.userId));
+}
+
+// 改密码、改名会影响学生在所有课程里的账号：只有学生只上自己的课时才允许（管理员不限）。
+// 否则任何老师把别人的学生学号导入自己班，再重置密码，就能登录那个学生的账号。
+async function assertOwnsAccount(userId: string, teacher: schema.User) {
+  if (teacher.isAdmin) return;
+  if ((await sharedWithOtherTeachers([userId], teacher.id)).size)
+    throw new Error("这个学生也在其他老师的课程里，不能在这里改他的密码或姓名。请让学生自己修改，或联系管理员。");
 }
 
 async function assertStudentInMyClass(userId: string, teacherId: string) {
