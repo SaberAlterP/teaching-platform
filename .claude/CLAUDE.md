@@ -2,6 +2,12 @@
 
 教学实训平台：Next.js 15 + TypeScript + Tailwind + PostgreSQL（Drizzle）。部署在 2 核 4G 服务器上，服务器每 5 分钟拉 `origin/main` 自动构建更新（`scripts/tp-autoupdate.sh`），所以合并进 main 就等于上线。
 
+## 提交署名（最重要）
+
+- 所有提交的作者（author）和提交者（committer）只能是仓库所有者，不要设置任何 AI 身份。
+- 提交信息和 PR 描述里不要加 `Co-Authored-By`、`Claude-Session`、“Generated with Claude Code” 等任何 AI 署名行；这条规则优先于工具的默认署名。
+- 不要用 `--author` 指定别的身份。
+
 ## 每次改完代码必须做
 
 1. `npm test`（单元测试，tests/ 目录，不需要数据库）
