@@ -3,7 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import { and, asc, count, eq, inArray, max } from "drizzle-orm";
 import { db, schema } from "@/db";
-import { assertLessonOwner, assertModuleOwner, createCourse, isLessonVisible } from "@/lib/course";
+import { assertLessonOwner, assertModuleOwner, createCourse, isLessonVisible, listTeacherCourses, teachesCourse } from "@/lib/course";
 import { cleanupFiles, regradeSubmissions, validateQuiz, writeOrder } from "@/lib/content";
 import type { HtmlData, ModuleType, QuizData } from "@/lib/modules";
 import { assetDir, savePackage } from "@/lib/storage";
@@ -12,7 +12,7 @@ import { findSkill, listSkills } from "./skills";
 import { draftInfo, draftPath, listDrafts, numbered, readDraft, staticCheck, writeDraft } from "./workspace";
 
 // AI 助手能调用的工具。每个工具：给模型看的定义、运行前是否要老师确认、运行逻辑。
-// 所有写入都只作用于该老师自己的课程，并记录到 ai_changes，方便撤销。
+// 所有写入都只作用于该老师自己创建或协作的课程，并记录到 ai_changes，方便撤销。
 
 export type PreviewReport = { errors: string[]; scores: number[] };
 
@@ -63,7 +63,7 @@ const ids = (a: Args, k: string) => {
 
 // ---------- 数据访问 ----------
 async function ownCourse(teacherId: string, courseId: string) {
-  const c = await db.query.courses.findFirst({ where: and(eq(schema.courses.id, courseId), eq(schema.courses.teacherId, teacherId)) });
+  const c = await db.query.courses.findFirst({ where: and(eq(schema.courses.id, courseId), teachesCourse(teacherId)) });
   if (!c) throw new ToolError(`课程 ${courseId} 不存在或不属于你`);
   return c;
 }
@@ -193,7 +193,7 @@ const TOOLS: Tool[] = [
     def: { name: "list_courses", description: "列出老师的全部课程（id、名称、课时数）", parameters: obj({}) },
     label: () => "查看课程列表",
     async run(_a, ctx) {
-      const cs = await db.query.courses.findMany({ where: eq(schema.courses.teacherId, ctx.teacherId), orderBy: asc(schema.courses.createdAt) });
+      const cs = await listTeacherCourses(ctx.teacherId);
       const counts = cs.length
         ? await db.select({ c: schema.lessons.courseId, n: count() }).from(schema.lessons).where(inArray(schema.lessons.courseId, cs.map((c) => c.id))).groupBy(schema.lessons.courseId)
         : [];

@@ -1,5 +1,5 @@
 // 数据模型：老师 → 课程 → 班级 → 学生
-// 每位老师可有多门课程，每门课目前用一个班级；表结构也支持多老师、多班级。
+// 每位老师可有多门课程，一门课可以有多个班级；创建者还可以邀请其他老师一起建设课程（course_teachers）。
 import {
   pgTable, pgEnum, text, timestamp, boolean, integer, real, jsonb, primaryKey, uniqueIndex, index,
 } from "drizzle-orm/pg-core";
@@ -41,9 +41,21 @@ export const courses = pgTable("courses", {
   id: id(),
   title: text("title").notNull(),
   description: text("description").notNull().default(""),
-  teacherId: text("teacher_id").notNull().references(() => users.id),
+  teacherId: text("teacher_id").notNull().references(() => users.id), // 创建者（课程负责人）
   createdAt: createdAt(),
 });
+
+// 协作教师：创建者邀请来一起建设课程的老师（不含创建者本人）。
+// 协作教师和创建者一样能编辑课时、管理学生、批改、发公告；只有创建者能邀请/移除老师、删除课程。
+export const courseTeachers = pgTable(
+  "course_teachers",
+  {
+    courseId: text("course_id").notNull().references(() => courses.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.courseId, t.userId] }), index("course_teachers_user_idx").on(t.userId)],
+);
 
 export const classes = pgTable("classes", {
   id: id(),
