@@ -4,6 +4,7 @@ import { db, schema } from "@/db";
 import { cleanupFiles, regradeSubmissions, writeOrder } from "@/lib/content";
 import type { QuizData } from "@/lib/modules";
 import { UNDO_DAYS } from "@/lib/storage";
+import { assertLessonOwner, assertModuleOwner, listTeacherCourses, teachesCourse } from "@/lib/course";
 
 // 撤销 AI 助手的一次改动。只有目标还保持 AI 改完时的样子才允许撤销，
 // 避免把老师（或 AI）之后做的修改冲掉。
@@ -14,6 +15,25 @@ const stable = (v: unknown): unknown =>
   : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, stable((v as Record<string, unknown>)[k])]))
   : v;
 const same = (a: unknown, b: unknown) => JSON.stringify(stable(a)) === JSON.stringify(stable(b));
+
+// 老师被移出协作课程后，不能再通过撤销旧的 AI 改动去动那门课。
+// 目标已被删除的情况交给下面各分支处理（会提示"已被删除"或什么都不做）。
+async function assertStillTeaches(teacherId: string, c: schema.AiChange) {
+  const deny = () => new Error("你已不在这门课程的授课老师里，不能撤销");
+  const lessonOk = (id: string) => assertLessonOwner(id, teacherId).catch(() => { throw deny(); });
+  if (c.kind === "module.update" || c.kind === "module.create") {
+    const m = await db.query.modules.findFirst({ where: eq(schema.modules.id, c.targetId) });
+    if (m) await assertModuleOwner(m.id, teacherId).catch(() => { throw deny(); });
+  } else if (c.kind === "module.delete" || c.kind === "module.reorder") {
+    const lessonId = c.kind === "module.delete" ? String(c.before?.lessonId ?? "") : c.targetId;
+    if (await db.query.lessons.findFirst({ where: eq(schema.lessons.id, lessonId) })) await lessonOk(lessonId);
+  } else if (c.kind === "lesson.create" || c.kind === "lesson.update") {
+    if (await db.query.lessons.findFirst({ where: eq(schema.lessons.id, c.targetId) })) await lessonOk(c.targetId);
+  } else if (c.kind.startsWith("course.") || c.kind === "lesson.reorder") {
+    const co = await db.query.courses.findFirst({ where: eq(schema.courses.id, c.targetId) });
+    if (co && !(await db.query.courses.findFirst({ where: and(eq(schema.courses.id, co.id), teachesCourse(teacherId)) }))) throw deny();
+  }
+}
 
 export async function undoChange(teacherId: string, changeId: string) {
   const [row] = await db
@@ -28,6 +48,7 @@ export async function undoChange(teacherId: string, changeId: string) {
   const before = c.before ?? {};
   const after = c.after ?? {};
   const changed = () => new Error("这之后内容又被修改过，不能直接撤销。请先撤销后面的改动，或手动修改");
+  await assertStillTeaches(teacherId, c);
 
   switch (c.kind) {
     case "module.update": {
@@ -119,8 +140,7 @@ export async function undoChange(teacherId: string, changeId: string) {
           .innerJoin(schema.classes, eq(schema.classes.id, schema.enrollments.classId))
           .where(eq(schema.classes.courseId, co.id));
         if (n) throw new Error("这门课已经有学生，不能撤销，请在课程页手动处理");
-        const [{ total }] = await db.select({ total: count() }).from(schema.courses).where(eq(schema.courses.teacherId, teacherId));
-        if (total <= 1) throw new Error("这是你唯一的课程，不能撤销");
+        if ((await listTeacherCourses(teacherId)).length <= 1) throw new Error("这是你唯一的课程，不能撤销");
         await db.delete(schema.courses).where(eq(schema.courses.id, co.id));
         await cleanupFiles();
       }

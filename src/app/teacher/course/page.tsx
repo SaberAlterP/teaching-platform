@@ -1,10 +1,11 @@
 import { asc, count, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireTeacher } from "@/lib/auth";
-import { getTeacherCourse } from "@/lib/course";
+import { getTeacherCourse, listCourseTeachers } from "@/lib/course";
 import Link from "next/link";
 import { LessonList } from "../LessonList";
 import { CourseHeader } from "../CourseHeader";
+import { CourseTeachers } from "../CourseTeachers";
 
 export default async function TeacherCoursePage() {
   const t = await requireTeacher();
@@ -34,6 +35,7 @@ export default async function TeacherCoursePage() {
     .select({ students: count() })
     .from(schema.enrollments)
     .where(inArray(schema.enrollments.classId, classes.map((c) => c.id)));
+  const teachers = await listCourseTeachers(course);
 
   return (
     <div className="space-y-6">
@@ -46,8 +48,9 @@ export default async function TeacherCoursePage() {
         className={classes.map((c) => c.name).join("、")}
         students={students}
         lessons={lessons.length}
-        canDelete={courses.length > 1 && lessons.length === 0 && students === 0}
+        canDelete={course.teacherId === t.id && courses.length > 1 && lessons.length === 0 && students === 0}
       />
+      <CourseTeachers key={`t-${course.id}`} courseId={course.id} me={t.id} teachers={teachers} />
       <LessonList
         otherCourses={courses.filter((c) => c.id !== course.id).map((c) => ({ id: c.id, title: c.title }))}
         lessons={lessons.map((l) => ({ ...l, moduleCount: countMap.get(l.id) ?? 0, openAt: l.openAt?.toISOString() ?? null, updatedAt: l.updatedAt.toISOString() }))}
