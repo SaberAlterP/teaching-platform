@@ -45,13 +45,16 @@ export const courses = pgTable("courses", {
   createdAt: createdAt(),
 });
 
-// 协作教师：创建者邀请来一起建设课程的老师（不含创建者本人）。
-// 协作教师和创建者一样能编辑课时、管理学生、批改、发公告；只有创建者能邀请/移除老师、删除课程。
+// 协作教师：创建者邀请来的老师（不含创建者本人），分两种：
+// - can_edit = true 共建老师：和创建者一样能编辑课时、管理学生、批改、发公告；
+// - can_edit = false 仅浏览：只能查看课时、学生、成绩和公告，不能做任何修改。
+// 只有创建者能邀请/移除老师、修改老师权限、删除课程。
 export const courseTeachers = pgTable(
   "course_teachers",
   {
     courseId: text("course_id").notNull().references(() => courses.id, { onDelete: "cascade" }),
     userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    canEdit: boolean("can_edit").notNull().default(true),
     createdAt: createdAt(),
   },
   (t) => [primaryKey({ columns: [t.courseId, t.userId] }), index("course_teachers_user_idx").on(t.userId)],

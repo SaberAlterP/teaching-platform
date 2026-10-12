@@ -9,7 +9,7 @@ export const metadata = { title: "批改" };
 
 export default async function GradingPage({ searchParams }: { searchParams: Promise<{ all?: string }> }) {
   const t = await requireTeacher();
-  const { course } = await getTeacherCourse(t.id);
+  const { course, canEdit } = await getTeacherCourse(t.id);
   const showAll = (await searchParams).all === "1";
 
   const rows = await db
@@ -46,7 +46,7 @@ export default async function GradingPage({ searchParams }: { searchParams: Prom
   return (
     <div className="space-y-4">
       <div className="flex items-end gap-4">
-        <h1 className="text-2xl font-bold">批改简答题</h1>
+        <h1 className="text-2xl font-bold">{canEdit ? "批改简答题" : "简答题作答"}</h1>
         <span className="text-slate-500">{showAll ? `共 ${items.length} 条作答` : `待批改 ${items.length} 条`}</span>
         <a href={showAll ? "/teacher/grading" : "/teacher/grading?all=1"} className="btn-ghost ml-auto">
           {showAll ? "只看待批改" : "查看全部（可修改已批分数）"}
@@ -55,7 +55,7 @@ export default async function GradingPage({ searchParams }: { searchParams: Prom
       {items.length === 0 ? (
         <div className="card p-10 text-center text-slate-400">🎉 没有需要批改的作答</div>
       ) : (
-        items.map(({ key, ...it }) => <GradeItem key={key} {...it} />)
+        items.map(({ key, ...it }) => <GradeItem key={key} {...it} readOnly={!canEdit} />)
       )}
     </div>
   );

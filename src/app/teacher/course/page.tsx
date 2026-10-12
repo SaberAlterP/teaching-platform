@@ -1,7 +1,7 @@
 import { asc, count, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireTeacher } from "@/lib/auth";
-import { getTeacherCourse, listCourseTeachers } from "@/lib/course";
+import { getTeacherCourse, listCourseTeachers, teachesCourse } from "@/lib/course";
 import Link from "next/link";
 import { LessonList } from "../LessonList";
 import { CourseHeader } from "../CourseHeader";
@@ -9,7 +9,7 @@ import { CourseTeachers } from "../CourseTeachers";
 
 export default async function TeacherCoursePage() {
   const t = await requireTeacher();
-  const { course, courses } = await getTeacherCourse(t.id);
+  const { course, courses, canEdit } = await getTeacherCourse(t.id);
   const lessons = await db
     .select({
       id: schema.lessons.id,
@@ -36,6 +36,8 @@ export default async function TeacherCoursePage() {
     .from(schema.enrollments)
     .where(inArray(schema.enrollments.classId, classes.map((c) => c.id)));
   const teachers = await listCourseTeachers(course);
+  // 课时只能移到自己能修改的课程
+  const editable = await db.query.courses.findMany({ where: teachesCourse(t.id), columns: { id: true, title: true } });
 
   return (
     <div className="space-y-6">
@@ -48,11 +50,13 @@ export default async function TeacherCoursePage() {
         className={classes.map((c) => c.name).join("、")}
         students={students}
         lessons={lessons.length}
+        canEdit={canEdit}
         canDelete={course.teacherId === t.id && courses.length > 1 && lessons.length === 0 && students === 0}
       />
       <CourseTeachers key={`t-${course.id}`} courseId={course.id} me={t.id} teachers={teachers} />
       <LessonList
-        otherCourses={courses.filter((c) => c.id !== course.id).map((c) => ({ id: c.id, title: c.title }))}
+        readOnly={!canEdit}
+        otherCourses={editable.filter((c) => c.id !== course.id).map((c) => ({ id: c.id, title: c.title }))}
         lessons={lessons.map((l) => ({ ...l, moduleCount: countMap.get(l.id) ?? 0, openAt: l.openAt?.toISOString() ?? null, updatedAt: l.updatedAt.toISOString() }))}
       />
     </div>

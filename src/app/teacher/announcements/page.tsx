@@ -9,7 +9,7 @@ export const metadata = { title: "公告" };
 
 export default async function AnnouncementsPage() {
   const t = await requireTeacher();
-  const { course } = await getTeacherCourse(t.id);
+  const { course, canEdit } = await getTeacherCourse(t.id);
   const list = await db
     .select()
     .from(schema.announcements)
@@ -23,6 +23,7 @@ export default async function AnnouncementsPage() {
         <p className="mt-1 text-sm text-slate-500">发给「{course.title}」的学生，学生在首页就能看到。</p>
       </div>
 
+      {canEdit && (
       <form action={postAnnouncement} className="card space-y-3 p-4">
         <input name="title" required maxLength={100} placeholder="标题，例如：本周五课堂测验" className="input w-full" />
         <textarea name="body" rows={3} maxLength={2000} placeholder="内容（可不填）" className="input w-full" />
@@ -33,6 +34,7 @@ export default async function AnnouncementsPage() {
           <button className="btn-primary">发布</button>
         </div>
       </form>
+      )}
 
       {list.length === 0 ? (
         <EmptyState title="还没有公告" hint="发布后，这门课的学生会在首页看到" />
@@ -49,8 +51,12 @@ export default async function AnnouncementsPage() {
                   {a.body && <p className="mt-1 text-sm whitespace-pre-wrap text-slate-600">{a.body}</p>}
                   <div className="mt-2 text-xs text-slate-400">{a.createdAt.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</div>
                 </div>
-                <form action={togglePin.bind(null, a.id)}><button className="btn-outline text-xs">{a.pinned ? "取消置顶" : "置顶"}</button></form>
-                <form action={deleteAnnouncement.bind(null, a.id)}><button className="btn-outline text-xs text-red-600">删除</button></form>
+                {canEdit && (
+                  <>
+                    <form action={togglePin.bind(null, a.id)}><button className="btn-outline text-xs">{a.pinned ? "取消置顶" : "置顶"}</button></form>
+                    <form action={deleteAnnouncement.bind(null, a.id)}><button className="btn-outline text-xs text-red-600">删除</button></form>
+                  </>
+                )}
               </div>
             </li>
           ))}

@@ -6,7 +6,8 @@ import { and, asc, count, eq, inArray, max, not, or, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { hashPassword, requireTeacher } from "@/lib/auth";
 import {
-  COURSE_COOKIE, assertLessonOwner, assertModuleOwner, courseMemberIds, createCourse, getTeacherCourse, listTeacherCourses, teachesCourse,
+  COURSE_COOKIE, assertLessonOwner, assertModuleOwner, courseMembers, createCourse, getEditableCourse, getTeacherCourse, listTeacherCourses,
+  teachesCourse,
 } from "@/lib/course";
 import { canRemoveTeacher, inviteError } from "@/lib/course-teachers";
 import { defaultData, type ModuleType, type QuizData } from "@/lib/modules";
@@ -19,7 +20,7 @@ const MODULE_TYPES: ModuleType[] = ["RICHTEXT", "MEDIA", "QUIZ", "HTML"];
 // ---------------- 课程 ----------------
 export async function updateCourse(fd: FormData) {
   const t = await requireTeacher();
-  const { course } = await getTeacherCourse(t.id);
+  const { course } = await getEditableCourse(t.id);
   await db
     .update(schema.courses)
     .set({ title: String(fd.get("title") || "我的课程"), description: String(fd.get("description") ?? "") })
@@ -76,8 +77,9 @@ export async function deleteCourse(courseId: string) {
 }
 
 // ---------------- 授课老师（多位老师共建一门课） ----------------
-// 邀请：创建者输入对方的用户名或邮箱，对方立即成为协作教师，下次打开就能在课程列表里看到这门课
-export async function inviteTeacher(courseId: string, account: string): Promise<{ error: string }> {
+// 邀请：创建者输入对方的用户名或邮箱，对方立即加入，下次打开就能在课程列表里看到这门课。
+// canEdit = true 共建（能修改），false 仅浏览
+export async function inviteTeacher(courseId: string, account: string, canEdit: boolean): Promise<{ error: string }> {
   const t = await requireTeacher();
   const { course } = await getTeacherCourse(t.id, String(courseId));
   if (course.teacherId !== t.id) return { error: "只有课程创建者能邀请老师" };
@@ -86,9 +88,25 @@ export async function inviteTeacher(courseId: string, account: string): Promise<
   const target = await db.query.users.findFirst({
     where: or(eq(schema.users.username, a), eq(schema.users.email, a.toLowerCase())),
   });
-  const err = inviteError(target, course, await courseMemberIds(course.id));
+  const err = inviteError(target, course, await courseMembers(course.id));
   if (err) return { error: err };
-  await db.insert(schema.courseTeachers).values({ courseId: course.id, userId: target!.id }).onConflictDoNothing();
+  await db
+    .insert(schema.courseTeachers)
+    .values({ courseId: course.id, userId: target!.id, canEdit: canEdit === true })
+    .onConflictDoNothing();
+  revalidatePath("/teacher", "layout");
+  return { error: "" };
+}
+
+// 创建者切换协作老师的权限：共建 ↔ 仅浏览
+export async function setTeacherCanEdit(courseId: string, userId: string, canEdit: boolean): Promise<{ error: string }> {
+  const t = await requireTeacher();
+  const { course } = await getTeacherCourse(t.id, String(courseId));
+  if (course.teacherId !== t.id) return { error: "只有课程创建者能修改老师权限" };
+  await db
+    .update(schema.courseTeachers)
+    .set({ canEdit: canEdit === true })
+    .where(and(eq(schema.courseTeachers.courseId, course.id), eq(schema.courseTeachers.userId, String(userId))));
   revalidatePath("/teacher", "layout");
   return { error: "" };
 }
@@ -101,8 +119,12 @@ export async function removeTeacher(courseId: string, userId: string): Promise<{
   await db
     .delete(schema.courseTeachers)
     .where(and(eq(schema.courseTeachers.courseId, course.id), eq(schema.courseTeachers.userId, String(userId))));
-  // 自己退出后，当前课程不再可用，回到第一门课
-  if (userId === t.id) (await cookies()).delete(COURSE_COOKIE);
+  if (userId === t.id) {
+    // 自己退出后，当前课程不再可用，回到第一门课
+    (await cookies()).delete(COURSE_COOKIE);
+    // 退出的是唯一一门课时，在这里先建好空课程：否则跳回首页时布局和页面会同时发现"没有课程"，各建一门
+    if (!(await listTeacherCourses(t.id)).length) await createCourse(t.id, "我的课程");
+  }
   revalidatePath("/teacher", "layout");
   return { error: "" };
 }
@@ -110,7 +132,7 @@ export async function removeTeacher(courseId: string, userId: string): Promise<{
 // ---------------- 课时 ----------------
 export async function createLesson(fd: FormData) {
   const t = await requireTeacher();
-  const { course } = await getTeacherCourse(t.id);
+  const { course } = await getEditableCourse(t.id);
   const [{ m }] = await db
     .select({ m: max(schema.lessons.order) })
     .from(schema.lessons)
@@ -146,7 +168,7 @@ export async function setLessonStatus(lessonId: string, status: "DRAFT" | "OPEN"
 // 批量开放 / 设为草稿（定时开放仍在单个课时里设置）
 export async function setLessonsStatus(ids: string[], status: "DRAFT" | "OPEN") {
   const t = await requireTeacher();
-  const { course } = await getTeacherCourse(t.id);
+  const { course } = await getEditableCourse(t.id);
   ids = stringArray(ids);
   if (!ids.length || (status !== "DRAFT" && status !== "OPEN")) return;
   await db
@@ -166,7 +188,7 @@ export async function deleteLesson(lessonId: string) {
 
 export async function reorderLessons(ids: string[]) {
   const t = await requireTeacher();
-  const { course } = await getTeacherCourse(t.id);
+  const { course } = await getEditableCourse(t.id);
   ids = stringArray(ids);
   await db.transaction(async (tx) => {
     for (let i = 0; i < ids.length; i++) {
@@ -198,7 +220,7 @@ export async function duplicateLesson(lessonId: string) {
 export async function moveLesson(lessonId: string, courseId: string) {
   const t = await requireTeacher();
   await assertLessonOwner(lessonId, t.id);
-  const { course } = await getTeacherCourse(t.id, courseId);
+  const { course } = await getEditableCourse(t.id, courseId);
   const [{ m }] = await db
     .select({ m: max(schema.lessons.order) })
     .from(schema.lessons)
@@ -218,7 +240,7 @@ export async function importLesson(json: string): Promise<{ id?: string; error?:
 
 async function doImportLesson(json: string) {
   const t = await requireTeacher();
-  const { course } = await getTeacherCourse(t.id);
+  const { course } = await getEditableCourse(t.id);
   let parsed: { title?: string; summary?: string; section?: string; modules?: { type: ModuleType; title?: string; data: object }[] };
   try {
     parsed = JSON.parse(json);
@@ -333,7 +355,7 @@ export type StudentRow = { username: string; name: string; password?: string };
 // 批量导入。学生的初始密码就是学号（也可以在名单里另填一列密码），不需要再分发密码。
 export async function importStudents(rows: StudentRow[], classId?: string) {
   const t = await requireTeacher();
-  const { cls: first } = await getTeacherCourse(t.id);
+  const { cls: first } = await getEditableCourse(t.id);
   const cls = (classId && (await myClasses(t.id)).find((c) => c.id === classId)) || first;
   const created: { username: string; name: string }[] = [];
   const skipped: { username: string; reason: string }[] = [];
@@ -432,11 +454,11 @@ export async function deleteStudent(userId: string) {
 
 // 当前课程下的所有班级
 async function myClasses(teacherId: string) {
-  const { course } = await getTeacherCourse(teacherId);
+  const { course } = await getEditableCourse(teacherId);
   return db.query.classes.findMany({ where: eq(schema.classes.courseId, course.id), orderBy: asc(schema.classes.createdAt) });
 }
 
-// 这些学生里，哪些还在别的老师的课程里（自己创建或协作的课程不算"别的"）
+// 这些学生里，哪些还在别的老师的课程里（自己创建或共建的课程不算"别的"；仅浏览的课程算别人的）
 async function sharedWithOtherTeachers(userIds: string[], teacherId: string) {
   if (!userIds.length) return new Set<string>();
   const rows = await db
@@ -468,7 +490,7 @@ async function assertStudentInMyClass(userId: string, teacherId: string) {
 // ---------------- 班级 ----------------
 export async function createClass(name: string) {
   const t = await requireTeacher();
-  const { course } = await getTeacherCourse(t.id);
+  const { course } = await getEditableCourse(t.id);
   const n = name.trim().slice(0, 30);
   if (!n) return { error: "请输入班级名称" };
   await db.insert(schema.classes).values({ name: n, courseId: course.id });

@@ -8,7 +8,8 @@ import { createLesson, deleteLesson, duplicateLesson, importLesson, moveLesson, 
 
 type L = { id: string; title: string; summary: string; section: string; status: string; openAt: string | null; moduleCount: number };
 
-export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; otherCourses: { id: string; title: string }[] }) {
+// readOnly：仅浏览的老师，只能查看和预览，不显示新建、拖动、批量、删除等修改操作
+export function LessonList({ lessons: initial, otherCourses, readOnly = false }: { lessons: L[]; otherCourses: { id: string; title: string }[]; readOnly?: boolean }) {
   const [lessons, setLessons] = useState(initial);
   useEffect(() => setLessons(initial), [initial]);
   const [drag, setDrag] = useState<number | null>(null);
@@ -58,12 +59,18 @@ export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; o
     <section>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h2 className="text-lg font-bold">课时</h2>
+        {readOnly ? (
+          <span className="text-sm text-amber-600">仅浏览：点课时可以预览</span>
+        ) : (
+        <>
         <span className="hidden text-sm text-slate-400 sm:inline">拖动方块可调整顺序</span>
         <div className="ml-auto flex gap-2">
           <input ref={fileRef} type="file" accept=".json" hidden onChange={(e) => e.target.files?.[0] && onImport(e.target.files[0])} />
           <button className="btn-outline" onClick={() => fileRef.current?.click()}>导入课时</button>
           <button className="btn-primary" onClick={() => setAdding(true)}>+ 新建课时</button>
         </div>
+        </>
+        )}
       </div>
 
       {lessons.length > 0 && (
@@ -82,6 +89,7 @@ export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; o
             </button>
           ))}
           {nSched > 0 && <span className="text-slate-400">定时 {nSched}</span>}
+          {!readOnly && (
           <button
             className="btn-ghost ml-auto px-2 py-1 text-xs"
             onClick={() => {
@@ -92,6 +100,7 @@ export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; o
           >
             {lessons.filter(visible).every((l) => sel.has(l.id)) ? "取消全选" : "全选当前"}
           </button>
+          )}
         </div>
       )}
 
@@ -113,7 +122,7 @@ export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; o
       )}
 
       {lessons.length === 0 ? (
-        <div className="card p-10 text-center text-slate-500">还没有课时，点击右上角“新建课时”开始。</div>
+        <div className="card p-10 text-center text-slate-500">{readOnly ? "还没有课时" : "还没有课时，点击右上角“新建课时”开始。"}</div>
       ) : (
         <div className="space-y-4">
           {groups.map((g, gi) => {
@@ -133,7 +142,7 @@ export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; o
                       {g.items.length} 课 · 草稿 {g.items.filter((x) => x.item.status === "DRAFT").length}
                     </span>
                   </button>
-                  <button
+                  {!readOnly && <button
                     className="btn-ghost shrink-0 px-2 py-1 text-xs"
                     onClick={() => {
                       const ids = g.items.filter((x) => visible(x.item)).map((x) => x.item.id);
@@ -141,7 +150,7 @@ export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; o
                     }}
                   >
                     选择本组
-                  </button>
+                  </button>}
                   </div>
                 )}
                 {!isFolded && (
@@ -153,31 +162,31 @@ export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; o
             return (
               <div
                 key={l.id}
-                draggable
+                draggable={!readOnly}
                 onDragStart={() => setDrag(i)}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => onDrop(i)}
                 className={`card relative flex min-h-40 flex-col p-3.5 transition hover:border-brand-500 hover:shadow-md ${drag === i ? "opacity-40" : ""} ${draft ? "border-dashed bg-slate-50" : ""} ${sel.has(l.id) ? "ring-2 ring-brand-500" : ""}`}
               >
-                <input
+                {!readOnly && <input
               type="checkbox"
               aria-label="选择课时"
               className="absolute top-[18px] left-3.5 z-10 h-4 w-4 cursor-pointer"
               checked={sel.has(l.id)}
               onChange={(e) => toggle([l.id], e.target.checked)}
-            />
-                <Link href={`/teacher/lessons/${l.id}`} prefetch={false} className="group block flex-1">
+            />}
+                <Link href={readOnly ? `/teacher/lessons/${l.id}/preview` : `/teacher/lessons/${l.id}`} prefetch={false} className="group block flex-1">
                   <div className="flex items-start gap-2">
-                    <span className="pl-6 text-xl font-extrabold leading-none text-brand-600">{no || `第${i + 1}课`}</span>
+                    <span className={`${readOnly ? "" : "pl-6"} text-xl font-extrabold leading-none text-brand-600`}>{no || `第${i + 1}课`}</span>
                     <span className="ml-auto shrink-0"><StatusBadge status={l.status} openAt={l.openAt} /></span>
                   </div>
                   <div className="mt-2 line-clamp-3 text-[15px] leading-snug font-semibold group-hover:text-brand-600">{name}</div>
                 </Link>
                 <div className="mt-3 flex items-center gap-1 text-xs text-slate-500">
-                  <span title="拖动方块可调整顺序" className="cursor-grab text-slate-300 select-none">⋮⋮</span>
+                  {!readOnly && <span title="拖动方块可调整顺序" className="cursor-grab text-slate-300 select-none">⋮⋮</span>}
                   <span>{l.moduleCount} 个模块</span>
                   <Link href={`/teacher/lessons/${l.id}/preview`} prefetch={false} className="btn-ghost ml-auto px-2 py-1 text-xs">预览</Link>
-                  <details className="relative">
+                  {!readOnly && <details className="relative">
                     <summary className="btn-ghost cursor-pointer list-none px-2 py-1 text-xs select-none">更多 ▾</summary>
                     <div className="absolute right-0 bottom-full z-10 mb-1 w-44 space-y-1 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
                       <button className="btn-ghost w-full justify-start" onClick={() => start(() => duplicateLesson(l.id))}>复制课时</button>
@@ -201,7 +210,7 @@ export function LessonList({ lessons: initial, otherCourses }: { lessons: L[]; o
                         删除课时
                       </button>
                     </div>
-                  </details>
+                  </details>}
                 </div>
               </div>
             );

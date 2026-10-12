@@ -5,7 +5,7 @@ import { gradeItem } from "../actions";
 
 export function GradeItem(p: {
   submissionId: string; questionId: string; lesson: string; module: string; prompt: string;
-  reference: string; points: number; answer: string; current: number | null; student: string;
+  reference: string; points: number; answer: string; current: number | null; student: string; readOnly?: boolean;
 }) {
   const [score, setScore] = useState(p.current ?? "");
   const [saved, setSaved] = useState(p.current !== null);
@@ -30,6 +30,9 @@ export function GradeItem(p: {
           {p.reference || <span className="text-slate-400">（未设置）</span>}
         </div>
       </div>
+      {p.readOnly ? (
+        <div className="mt-3 text-sm text-slate-500">{p.current === null ? "待批改" : `已批改：${p.current} 分`}</div>
+      ) : (
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="text-sm text-slate-500">给分：</span>
         {[0, 0.5, 1].map((f) => {
@@ -47,6 +50,7 @@ export function GradeItem(p: {
         <button className="btn-primary py-1" disabled={pending || score === ""} onClick={() => save(Number(score))}>确定</button>
         {saved && <span className="text-sm text-emerald-600">已批改：{score} 分</span>}
       </div>
+      )}
     </div>
   );
 }

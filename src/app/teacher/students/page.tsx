@@ -8,7 +8,7 @@ export const metadata = { title: "学生" };
 
 export default async function StudentsPage() {
   const t = await requireTeacher();
-  const { course } = await getTeacherCourse(t.id);
+  const { course, canEdit } = await getTeacherCourse(t.id);
   const classes = await db.select().from(schema.classes).where(eq(schema.classes.courseId, course.id)).orderBy(asc(schema.classes.createdAt));
   const students = await db
     .select({
@@ -43,6 +43,7 @@ export default async function StudentsPage() {
       className={course.title}
       classes={classes.map((c) => ({ id: c.id, name: c.name }))}
       totalModules={totalModules}
+      readOnly={!canEdit}
       students={students.map((s) => ({
         ...s,
         lastLoginAt: s.lastLoginAt?.toISOString() ?? null,

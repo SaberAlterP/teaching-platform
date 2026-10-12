@@ -1,7 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireTeacher } from "@/lib/auth";
-import { teachesCourse } from "@/lib/course";
+import { viewsCourse } from "@/lib/course";
 import { getAiSettings } from "@/lib/ai/settings";
 import { AssistantTabs } from "./AssistantTabs";
 import { ChatClient } from "./ChatClient";
@@ -31,7 +31,7 @@ export default async function AssistantPage({ searchParams }: { searchParams: Pr
       .select({ id: schema.lessons.id, title: schema.lessons.title })
       .from(schema.lessons)
       .innerJoin(schema.courses, eq(schema.courses.id, schema.lessons.courseId))
-      .where(and(eq(schema.lessons.id, lessonId), teachesCourse(t.id)));
+      .where(and(eq(schema.lessons.id, lessonId), viewsCourse(t.id)));
     lesson = row ?? null;
   }
 

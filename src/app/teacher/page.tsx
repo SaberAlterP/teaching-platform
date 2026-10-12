@@ -1,7 +1,7 @@
 import { count, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireTeacher } from "@/lib/auth";
-import { getTeacherCourse } from "@/lib/course";
+import { getTeacherCourse, teachesCourse } from "@/lib/course";
 import { CourseCard } from "@/components/CourseCard";
 import { openCourse } from "./actions";
 import { PendingButton } from "@/components/PendingButton";
@@ -28,11 +28,14 @@ export default async function TeacherHome() {
     .innerJoin(schema.classes, eq(schema.classes.id, schema.enrollments.classId))
     .where(inArray(schema.classes.courseId, ids))
     .groupBy(schema.classes.courseId);
-  // 别人创建、邀请我协作的课程，方块上注明创建者
+  // 别人创建、邀请我共建或浏览的课程，方块上注明身份和创建者
   const ownerIds = [...new Set(courses.filter((c) => c.teacherId !== t.id).map((c) => c.teacherId))];
   const owners = ownerIds.length
     ? new Map((await db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).where(inArray(schema.users.id, ownerIds))).map((u) => [u.id, u.name]))
     : new Map<string, string>();
+  const editable = ownerIds.length
+    ? new Set((await db.query.courses.findMany({ where: teachesCourse(t.id), columns: { id: true } })).map((c) => c.id))
+    : new Set<string>();
   const stat = (cid: string) => {
     const rows = lessonRows.filter((r) => r.courseId === cid);
     const num = (s: string) => rows.filter((r) => r.status === s).reduce((a, r) => a + r.n, 0);
@@ -76,7 +79,7 @@ export default async function TeacherHome() {
                     </div>
                   )}
                   <div className="mt-2 text-xs text-slate-400">
-                    学生 {s.students} 人{c.teacherId !== t.id && ` · 协作课程（${owners.get(c.teacherId) ?? "其他老师"}创建）`}
+                    学生 {s.students} 人{c.teacherId !== t.id && ` · ${editable.has(c.id) ? "共建" : "仅浏览"}（${owners.get(c.teacherId) ?? "其他老师"}创建）`}
                   </div>
                 </CourseCard>
               </PendingButton>

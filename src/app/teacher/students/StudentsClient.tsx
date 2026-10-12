@@ -34,7 +34,8 @@ function parsePasted(text: string): StudentRow[] {
     .filter((r) => r.username && !/学号|账号/.test(r.username));
 }
 
-export function StudentsClient({ className, classes, students, totalModules }: { className: string; classes: C[]; students: S[]; totalModules: number }) {
+// readOnly：仅浏览的老师，只能看名单和进度，不显示导入、改名、重置密码、删除、班级管理
+export function StudentsClient({ className, classes, students, totalModules, readOnly = false }: { className: string; classes: C[]; students: S[]; totalModules: number; readOnly?: boolean }) {
   const [clsFilter, setClsFilter] = useState("");
   const [target, setTarget] = useState(classes[0]?.id ?? "");
   const [manage, setManage] = useState(false);
@@ -94,7 +95,7 @@ export function StudentsClient({ className, classes, students, totalModules }: {
           <h1 className="text-2xl font-bold">学生管理</h1>
           <p className="mt-1 text-slate-500">{className} · {classes.length} 个班 · 共 {students.length} 人</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        {!readOnly && <div className="flex flex-wrap gap-2">
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" hidden onChange={(e) => { if (e.target.files?.[0]) onFile(e.target.files[0]); e.target.value = ""; }} />
           <button className="btn-ghost" onClick={downloadTemplate}>下载名单模板</button>
           <button
@@ -121,7 +122,7 @@ export function StudentsClient({ className, classes, students, totalModules }: {
           )}
           <button className="btn-outline" onClick={() => setMode(mode === "paste" ? null : "paste")}>粘贴名单</button>
           <button className="btn-primary" onClick={() => fileRef.current?.click()}>导入 Excel 名单</button>
-        </div>
+        </div>}
       </div>
 
       <div className="card space-y-3 p-3">
@@ -135,7 +136,7 @@ export function StudentsClient({ className, classes, students, totalModules }: {
               {c.name} {students.filter((s) => !c.id || s.classId === c.id).length}
             </button>
           ))}
-          <button className="btn-ghost ml-auto px-2 py-1 text-xs" onClick={() => setManage(!manage)}>{manage ? "收起班级管理" : "班级管理"}</button>
+          {!readOnly && <button className="btn-ghost ml-auto px-2 py-1 text-xs" onClick={() => setManage(!manage)}>{manage ? "收起班级管理" : "班级管理"}</button>}
         </div>
         {manage && (
           <div className="space-y-2 border-t border-slate-100 pt-3 text-sm">
@@ -242,10 +243,10 @@ export function StudentsClient({ className, classes, students, totalModules }: {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {list.map((s) => (
-              <StudentRowView key={s.id} s={s} classes={classes} total={totalModules} onReset={() => setResult({ message: `已将 ${s.name} 的密码重置为学号 ${s.username}。`, skipped: [] })} />
+              <StudentRowView key={s.id} s={s} classes={classes} total={totalModules} readOnly={readOnly} onReset={() => setResult({ message: `已将 ${s.name} 的密码重置为学号 ${s.username}。`, skipped: [] })} />
             ))}
             {list.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{students.length ? "没有匹配的学生" : "还没有学生，先导入名单吧"}</td></tr>
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">{students.length ? "没有匹配的学生" : readOnly ? "还没有学生" : "还没有学生，先导入名单吧"}</td></tr>
             )}
           </tbody>
         </table>
@@ -254,7 +255,7 @@ export function StudentsClient({ className, classes, students, totalModules }: {
   );
 }
 
-function StudentRowView({ s, classes, total, onReset }: { s: S; classes: C[]; total: number; onReset: () => void }) {
+function StudentRowView({ s, classes, total, readOnly, onReset }: { s: S; classes: C[]; total: number; readOnly: boolean; onReset: () => void }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(s.name);
   const [pending, start] = useTransition();
@@ -277,7 +278,7 @@ function StudentRowView({ s, classes, total, onReset }: { s: S; classes: C[]; to
           <select
             className="select w-auto py-1 text-sm"
             value={s.classId}
-            disabled={pending}
+            disabled={pending || readOnly}
             onChange={(e) => start(() => moveStudent(s.id, e.target.value))}
           >
             {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -296,6 +297,7 @@ function StudentRowView({ s, classes, total, onReset }: { s: S; classes: C[]; to
         {s.lastLoginAt ? new Date(s.lastLoginAt).toLocaleString("zh-CN", { hour12: false }) : <span className="text-slate-300">从未登录</span>}
       </td>
       <td className="px-4 py-2.5 text-right whitespace-nowrap">
+        {!readOnly && <>
         <button className="btn-ghost px-2 py-1" onClick={() => setEditing(!editing)}>改名</button>
         <button
           className="btn-ghost px-2 py-1"
@@ -310,6 +312,7 @@ function StudentRowView({ s, classes, total, onReset }: { s: S; classes: C[]; to
         >
           删除
         </button>
+        </>}
       </td>
     </tr>
   );
