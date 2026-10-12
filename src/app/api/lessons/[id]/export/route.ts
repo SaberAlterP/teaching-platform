@@ -8,7 +8,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const u = await getApiUser("TEACHER");
   if (!u) return new Response("无权限", { status: 403 });
   const { id } = await params;
-  const lesson = await assertLessonOwner(id, u.id).catch(() => null);
+  const lesson = await assertLessonOwner(id, u.id, "view").catch(() => null);
   if (!lesson) return new Response("Not found", { status: 404 });
   const mods = await db.query.modules.findMany({ where: eq(schema.modules.lessonId, id), orderBy: asc(schema.modules.order) });
   const body = {

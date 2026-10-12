@@ -9,7 +9,7 @@ import { Onboarding } from "./Onboarding";
 
 export default async function TeacherLayout({ children }: { children: React.ReactNode }) {
   const t = await requireTeacher();
-  const { course, courses } = await getTeacherCourse(t.id);
+  const { course, courses, canEdit } = await getTeacherCourse(t.id);
   const [{ pending }] = await db
     .select({ pending: count() })
     .from(schema.submissions)
@@ -39,7 +39,14 @@ export default async function TeacherLayout({ children }: { children: React.Reac
           ...(t.isAdmin ? [{ href: "/admin", label: "管理", badge: waiting }] : []),
         ]}
       />
-      <main className="mx-auto max-w-7xl px-4 py-6 has-[.lesson-full]:max-w-none">{children}</main>
+      <main className="mx-auto max-w-7xl px-4 py-6 has-[.lesson-full]:max-w-none">
+        {!canEdit && (
+          <div className="mb-4 rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-800">
+            你在「{course.title}」是仅浏览权限：可以查看课时、学生、成绩和公告，不能修改。需要修改请联系课程创建者。
+          </div>
+        )}
+        {children}
+      </main>
       {!t.onboarded && <Onboarding />}
     </>
   );

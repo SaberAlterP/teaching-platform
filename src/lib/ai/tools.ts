@@ -3,7 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import { and, asc, count, eq, inArray, max } from "drizzle-orm";
 import { db, schema } from "@/db";
-import { assertLessonOwner, assertModuleOwner, createCourse, isLessonVisible, listTeacherCourses, teachesCourse } from "@/lib/course";
+import { assertLessonOwner, assertModuleOwner, createCourse, isLessonVisible, listTeacherCourses, teachesCourse, viewsCourse } from "@/lib/course";
 import { cleanupFiles, regradeSubmissions, validateQuiz, writeOrder } from "@/lib/content";
 import type { HtmlData, ModuleType, QuizData } from "@/lib/modules";
 import { assetDir, savePackage } from "@/lib/storage";
@@ -12,7 +12,7 @@ import { findSkill, listSkills } from "./skills";
 import { draftInfo, draftPath, listDrafts, numbered, readDraft, staticCheck, writeDraft } from "./workspace";
 
 // AI 助手能调用的工具。每个工具：给模型看的定义、运行前是否要老师确认、运行逻辑。
-// 所有写入都只作用于该老师自己创建或协作的课程，并记录到 ai_changes，方便撤销。
+// 所有写入都只作用于该老师自己创建或共建的课程（仅浏览的课程只能读），并记录到 ai_changes，方便撤销。
 
 export type PreviewReport = { errors: string[]; scores: number[] };
 
@@ -62,23 +62,28 @@ const ids = (a: Args, k: string) => {
 };
 
 // ---------- 数据访问 ----------
-async function ownCourse(teacherId: string, courseId: string) {
-  const c = await db.query.courses.findFirst({ where: and(eq(schema.courses.id, courseId), teachesCourse(teacherId)) });
-  if (!c) throw new ToolError(`课程 ${courseId} 不存在或不属于你`);
+// 默认检查修改权限；只读的工具传 mode = "view"（仅浏览的课程也能读）
+const noAccess = (what: string, mode: "edit" | "view") =>
+  new ToolError(`${what} 不存在或不属于你${mode === "edit" ? "（也可能你在这门课只有浏览权限，不能修改）" : ""}`);
+async function ownCourse(teacherId: string, courseId: string, mode: "edit" | "view" = "edit") {
+  const c = await db.query.courses.findFirst({
+    where: and(eq(schema.courses.id, courseId), mode === "edit" ? teachesCourse(teacherId) : viewsCourse(teacherId)),
+  });
+  if (!c) throw noAccess(`课程 ${courseId}`, mode);
   return c;
 }
-async function ownLesson(teacherId: string, lessonId: string) {
+async function ownLesson(teacherId: string, lessonId: string, mode: "edit" | "view" = "edit") {
   try {
-    return await assertLessonOwner(lessonId, teacherId);
+    return await assertLessonOwner(lessonId, teacherId, mode);
   } catch {
-    throw new ToolError(`课时 ${lessonId} 不存在或不属于你`);
+    throw noAccess(`课时 ${lessonId}`, mode);
   }
 }
-async function ownModule(teacherId: string, moduleId: string) {
+async function ownModule(teacherId: string, moduleId: string, mode: "edit" | "view" = "edit") {
   try {
-    return await assertModuleOwner(moduleId, teacherId);
+    return await assertModuleOwner(moduleId, teacherId, mode);
   } catch {
-    throw new ToolError(`模块 ${moduleId} 不存在或不属于你`);
+    throw noAccess(`模块 ${moduleId}`, mode);
   }
 }
 const lessonModules = (lessonId: string) =>
@@ -190,7 +195,7 @@ const MODULE_SCHEMA = obj(
 const TOOLS: Tool[] = [
   // ---- 读取 ----
   {
-    def: { name: "list_courses", description: "列出老师的全部课程（id、名称、课时数）", parameters: obj({}) },
+    def: { name: "list_courses", description: "列出老师的全部课程（id、名称、课时数、能否修改；can_edit=false 的课程只能查看）", parameters: obj({}) },
     label: () => "查看课程列表",
     async run(_a, ctx) {
       const cs = await listTeacherCourses(ctx.teacherId);
@@ -198,7 +203,8 @@ const TOOLS: Tool[] = [
         ? await db.select({ c: schema.lessons.courseId, n: count() }).from(schema.lessons).where(inArray(schema.lessons.courseId, cs.map((c) => c.id))).groupBy(schema.lessons.courseId)
         : [];
       const m = new Map(counts.map((x) => [x.c, x.n]));
-      return { result: cs.map((c) => ({ id: c.id, title: c.title, description: c.description, lessons: m.get(c.id) ?? 0 })) };
+      const editable = new Set((await db.query.courses.findMany({ where: teachesCourse(ctx.teacherId), columns: { id: true } })).map((c) => c.id));
+      return { result: cs.map((c) => ({ id: c.id, title: c.title, description: c.description, lessons: m.get(c.id) ?? 0, can_edit: editable.has(c.id) })) };
     },
   },
   {
@@ -209,7 +215,7 @@ const TOOLS: Tool[] = [
     },
     label: () => "查看课程",
     async run(a, ctx) {
-      const c = await ownCourse(ctx.teacherId, s(a, "course_id")!);
+      const c = await ownCourse(ctx.teacherId, s(a, "course_id")!, "view");
       const ls = await db.query.lessons.findMany({ where: eq(schema.lessons.courseId, c.id), orderBy: [asc(schema.lessons.order), asc(schema.lessons.createdAt)] });
       const ms = ls.length
         ? await db
@@ -238,7 +244,7 @@ const TOOLS: Tool[] = [
     },
     label: () => "查看课时",
     async run(a, ctx) {
-      const l = await ownLesson(ctx.teacherId, s(a, "lesson_id")!);
+      const l = await ownLesson(ctx.teacherId, s(a, "lesson_id")!, "view");
       const ms = await lessonModules(l.id);
       const modules = [];
       for (const m of ms) {
@@ -665,7 +671,8 @@ const TOOLS: Tool[] = [
     },
     label: () => "打开已有动画",
     async run(a, ctx) {
-      const m = await ownModule(ctx.teacherId, s(a, "module_id")!);
+      // 只是拷到草稿区，不改原模块；发布回去时 html_publish 会再检查修改权限
+      const m = await ownModule(ctx.teacherId, s(a, "module_id")!, "view");
       if (m.type !== "HTML") throw new ToolError("这个模块不是 HTML 互动模块");
       const assetId = (m.data as unknown as HtmlData).assetId;
       const asset = assetId ? await db.query.assets.findFirst({ where: eq(schema.assets.id, assetId) }) : null;

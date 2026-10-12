@@ -78,6 +78,13 @@
       "when": 1791792890159,
       "tag": "0010_course_teachers",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791795160252,
+      "tag": "0011_course_teacher_can_edit",
+      "breakpoints": true
     }
   ]
 }

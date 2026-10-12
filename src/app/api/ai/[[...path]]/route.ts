@@ -3,7 +3,9 @@ import { revalidatePath } from "next/cache";
 import { and, asc, count, eq, inArray, max } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { teacherFromRequest } from "@/lib/api-key";
-import { assertLessonOwner, assertModuleOwner, createCourse, getTeacherCourse, listTeacherCourses } from "@/lib/course";
+import {
+  VIEW_ONLY_ERROR, assertLessonOwner, assertModuleOwner, createCourse, getEditableCourse, getTeacherCourse, listTeacherCourses, teachesCourse,
+} from "@/lib/course";
 import { cleanupFiles, regradeSubmissions, validateQuiz, writeOrder } from "@/lib/content";
 import { defaultData, type ModuleType, type QuizData } from "@/lib/modules";
 import { MAX_FILE, MAX_PACKAGE, saveFile, savePackage } from "@/lib/storage";
@@ -18,7 +20,7 @@ const HELP = {
   说明:
     "教学实训平台 AI 接口。除本说明外，所有请求都要带请求头 Authorization: Bearer <密钥>，请求体为 JSON。老师可以有多门课程：/course 和新建课时默认操作第一门课，加查询参数 ?course=<课程ID> 指定其他课程。",
   接口: {
-    "GET /api/ai/courses": "全部课程列表（id、名称、简介、课时数）",
+    "GET /api/ai/courses": "全部课程列表（id、名称、简介、课时数、canEdit）；canEdit 为 false 的课程是别的老师邀请你仅浏览的，只能读取不能修改",
     "POST /api/ai/courses": "{ title, description? } 新建课程，返回 id",
     "GET /api/ai/course?course=<ID>": "课程信息和全部课时（含每个课时的模块列表，不含模块内容）",
     "PATCH /api/ai/course?course=<ID>": "{ title?, description? } 修改课程名称、简介",
@@ -100,7 +102,11 @@ function done(lessonId?: string) {
 
 async function route(req: Request, method: string, path: string[], t: Teacher) {
   const [a, id, sub] = path;
-  const { course } = await getTeacherCourse(t.id, new URL(req.url).searchParams.get("course") || undefined);
+  const { course, canEdit } = await getTeacherCourse(t.id, new URL(req.url).searchParams.get("course") || undefined);
+  // 仅浏览的课程：只能 GET 读取，不能修改
+  const mustEdit = () => {
+    if (!canEdit) throw new ApiError(VIEW_ONLY_ERROR, 403);
+  };
 
   // ---- 课程 ----
   if (a === "courses" && !id && method === "GET") {
@@ -111,7 +117,8 @@ async function route(req: Request, method: string, path: string[], t: Teacher) {
       .where(inArray(schema.lessons.courseId, all.map((c) => c.id)))
       .groupBy(schema.lessons.courseId);
     const n = new Map(counts.map((c) => [c.courseId, c.n]));
-    return { courses: all.map((c) => ({ id: c.id, title: c.title, description: c.description, lessons: n.get(c.id) ?? 0 })) };
+    const editable = new Set((await db.query.courses.findMany({ where: teachesCourse(t.id), columns: { id: true } })).map((c) => c.id));
+    return { courses: all.map((c) => ({ id: c.id, title: c.title, description: c.description, lessons: n.get(c.id) ?? 0, canEdit: editable.has(c.id) })) };
   }
   if (a === "courses" && !id && method === "POST") {
     const b = await body(req);
@@ -141,6 +148,7 @@ async function route(req: Request, method: string, path: string[], t: Teacher) {
     };
   }
   if (a === "course" && !id && method === "PATCH") {
+    mustEdit();
     const b = await body(req);
     const patch = { title: str(b.title, "title")?.trim() || undefined, description: str(b.description, "description") };
     await db.update(schema.courses).set(patch).where(eq(schema.courses.id, course.id));
@@ -148,6 +156,7 @@ async function route(req: Request, method: string, path: string[], t: Teacher) {
     return;
   }
   if (a === "course" && id === "order" && method === "PUT") {
+    mustEdit();
     const ids = (await body(req)).ids;
     if (!Array.isArray(ids)) throw new ApiError("ids 必须是数组");
     await db.transaction(async (tx) => {
@@ -163,6 +172,7 @@ async function route(req: Request, method: string, path: string[], t: Teacher) {
 
   // ---- 课时 ----
   if (a === "lessons" && !id && method === "POST") {
+    mustEdit();
     const b = await body(req);
     const mods = b.modules === undefined ? [] : b.modules;
     if (!Array.isArray(mods)) throw new ApiError("modules 必须是数组");
@@ -187,7 +197,7 @@ async function route(req: Request, method: string, path: string[], t: Teacher) {
     return { id: l.id };
   }
   if (a === "lessons" && id && !sub && method === "GET") {
-    const l = await assertLessonOwner(id, t.id);
+    const l = await assertLessonOwner(id, t.id, "view");
     const mods = await db.query.modules.findMany({ where: eq(schema.modules.lessonId, id), orderBy: asc(schema.modules.order) });
     return {
       id: l.id, title: l.title, summary: l.summary, section: l.section, status: l.status, openAt: l.openAt,
@@ -202,7 +212,7 @@ async function route(req: Request, method: string, path: string[], t: Teacher) {
     if (b.summary !== undefined) patch.summary = str(b.summary, "summary");
     if (b.section !== undefined) patch.section = str(b.section, "section")!.trim();
     if (b.courseId !== undefined) {
-      const { course: target } = await getTeacherCourse(t.id, str(b.courseId, "courseId"));
+      const { course: target } = await getEditableCourse(t.id, str(b.courseId, "courseId"));
       const [{ m }] = await db.select({ m: max(schema.lessons.order) }).from(schema.lessons).where(eq(schema.lessons.courseId, target.id));
       patch.courseId = target.id;
       patch.order = (m ?? -1) + 1;
