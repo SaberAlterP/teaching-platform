@@ -2,10 +2,13 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { and, asc, count, eq, inArray, max, ne, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, max, not, or, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { hashPassword, requireTeacher } from "@/lib/auth";
-import { COURSE_COOKIE, assertLessonOwner, assertModuleOwner, createCourse, getTeacherCourse, listTeacherCourses } from "@/lib/course";
+import {
+  COURSE_COOKIE, assertLessonOwner, assertModuleOwner, courseMemberIds, createCourse, getTeacherCourse, listTeacherCourses, teachesCourse,
+} from "@/lib/course";
+import { canRemoveTeacher, inviteError } from "@/lib/course-teachers";
 import { defaultData, type ModuleType, type QuizData } from "@/lib/modules";
 import { createApiKey } from "@/lib/api-key";
 import { cleanupFiles, regradeSubmissions, validateQuiz, writeOrder } from "@/lib/content";
@@ -53,10 +56,11 @@ export async function newCourse(title: string) {
   redirect("/teacher/course");
 }
 
-// 只允许删除空课程（没有课时、没有学生），防止误删内容和成绩
+// 只允许创建者删除空课程（没有课时、没有学生），防止误删内容和成绩
 export async function deleteCourse(courseId: string) {
   const t = await requireTeacher();
   const { course } = await getTeacherCourse(t.id, courseId);
+  if (course.teacherId !== t.id) return { error: "只有课程创建者能删除课程，你可以在「授课老师」里退出这门课" };
   if ((await listTeacherCourses(t.id)).length <= 1) return { error: "至少要保留一门课程" };
   const [{ n: lessons }] = await db.select({ n: count() }).from(schema.lessons).where(eq(schema.lessons.courseId, course.id));
   const [{ n: students }] = await db
@@ -67,6 +71,38 @@ export async function deleteCourse(courseId: string) {
   if (lessons || students) return { error: `这门课还有 ${lessons} 个课时、${students} 名学生，请先删除或移走后再删课程` };
   await db.delete(schema.courses).where(eq(schema.courses.id, course.id));
   (await cookies()).delete(COURSE_COOKIE);
+  revalidatePath("/teacher", "layout");
+  return { error: "" };
+}
+
+// ---------------- 授课老师（多位老师共建一门课） ----------------
+// 邀请：创建者输入对方的用户名或邮箱，对方立即成为协作教师，下次打开就能在课程列表里看到这门课
+export async function inviteTeacher(courseId: string, account: string): Promise<{ error: string }> {
+  const t = await requireTeacher();
+  const { course } = await getTeacherCourse(t.id, String(courseId));
+  if (course.teacherId !== t.id) return { error: "只有课程创建者能邀请老师" };
+  const a = String(account ?? "").trim();
+  if (!a) return { error: "请输入老师的用户名或邮箱" };
+  const target = await db.query.users.findFirst({
+    where: or(eq(schema.users.username, a), eq(schema.users.email, a.toLowerCase())),
+  });
+  const err = inviteError(target, course, await courseMemberIds(course.id));
+  if (err) return { error: err };
+  await db.insert(schema.courseTeachers).values({ courseId: course.id, userId: target!.id }).onConflictDoNothing();
+  revalidatePath("/teacher", "layout");
+  return { error: "" };
+}
+
+// 移除协作教师（创建者操作），或协作教师自己退出课程。只是解除关系，课程内容和对方账号都不受影响
+export async function removeTeacher(courseId: string, userId: string): Promise<{ error: string }> {
+  const t = await requireTeacher();
+  const { course } = await getTeacherCourse(t.id, String(courseId));
+  if (!canRemoveTeacher(course, t.id, String(userId))) return { error: "只有课程创建者能移除其他老师" };
+  await db
+    .delete(schema.courseTeachers)
+    .where(and(eq(schema.courseTeachers.courseId, course.id), eq(schema.courseTeachers.userId, String(userId))));
+  // 自己退出后，当前课程不再可用，回到第一门课
+  if (userId === t.id) (await cookies()).delete(COURSE_COOKIE);
   revalidatePath("/teacher", "layout");
   return { error: "" };
 }
@@ -400,7 +436,7 @@ async function myClasses(teacherId: string) {
   return db.query.classes.findMany({ where: eq(schema.classes.courseId, course.id), orderBy: asc(schema.classes.createdAt) });
 }
 
-// 这些学生里，哪些还在别的老师的课程里
+// 这些学生里，哪些还在别的老师的课程里（自己创建或协作的课程不算"别的"）
 async function sharedWithOtherTeachers(userIds: string[], teacherId: string) {
   if (!userIds.length) return new Set<string>();
   const rows = await db
@@ -408,7 +444,7 @@ async function sharedWithOtherTeachers(userIds: string[], teacherId: string) {
     .from(schema.enrollments)
     .innerJoin(schema.classes, eq(schema.classes.id, schema.enrollments.classId))
     .innerJoin(schema.courses, eq(schema.courses.id, schema.classes.courseId))
-    .where(and(inArray(schema.enrollments.userId, userIds), ne(schema.courses.teacherId, teacherId)));
+    .where(and(inArray(schema.enrollments.userId, userIds), not(teachesCourse(teacherId))));
   return new Set(rows.map((r) => r.userId));
 }
 

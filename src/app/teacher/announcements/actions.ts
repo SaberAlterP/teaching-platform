@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireTeacher } from "@/lib/auth";
-import { getTeacherCourse } from "@/lib/course";
+import { getTeacherCourse, teachesCourse } from "@/lib/course";
 
 function refresh() {
   revalidatePath("/teacher/announcements");
@@ -20,13 +20,13 @@ export async function postAnnouncement(fd: FormData) {
   refresh();
 }
 
-// 只能动自己课程里的公告
+// 只能动自己创建或协作的课程里的公告
 async function ownAnnouncement(id: string, teacherId: string) {
   const [row] = await db
     .select({ id: schema.announcements.id, pinned: schema.announcements.pinned })
     .from(schema.announcements)
     .innerJoin(schema.courses, eq(schema.courses.id, schema.announcements.courseId))
-    .where(and(eq(schema.announcements.id, id), eq(schema.courses.teacherId, teacherId)));
+    .where(and(eq(schema.announcements.id, id), teachesCourse(teacherId)));
   if (!row) throw new Error("公告不存在或无权限");
   return row;
 }
