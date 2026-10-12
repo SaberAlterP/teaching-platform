@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { deleteCourse, updateCourse } from "./actions";
 
 export function CourseHeader(p: {
-  id: string; title: string; description: string; className: string; students: number; lessons: number; canDelete: boolean;
+  id: string; title: string; description: string; className: string; students: number; lessons: number; canEdit: boolean; canDelete: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const router = useRouter();
@@ -53,7 +53,7 @@ export function CourseHeader(p: {
           <span>课时 {p.lessons} 个</span>
         </div>
       </div>
-      <button className="btn-outline" onClick={() => setEditing(true)}>编辑课程信息</button>
+      {p.canEdit && <button className="btn-outline" onClick={() => setEditing(true)}>编辑课程信息</button>}
     </div>
   );
 }

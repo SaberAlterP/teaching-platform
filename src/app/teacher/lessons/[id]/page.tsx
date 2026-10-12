@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireTeacher } from "@/lib/auth";
@@ -11,7 +11,11 @@ export default async function LessonEditPage({ params }: { params: Promise<{ id:
   const t = await requireTeacher();
   const { id } = await params;
   const lesson = await assertLessonOwner(id, t.id).catch(() => null);
-  if (!lesson) notFound();
+  if (!lesson) {
+    // 仅浏览的老师不能编辑，带他去预览页
+    if (await assertLessonOwner(id, t.id, "view").catch(() => null)) redirect(`/teacher/lessons/${id}/preview`);
+    notFound();
+  }
   const mods = await db.query.modules.findMany({
     where: eq(schema.modules.lessonId, id),
     orderBy: asc(schema.modules.order),

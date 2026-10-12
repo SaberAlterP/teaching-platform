@@ -33,7 +33,8 @@ export async function sendMessage(input: { chatId?: string; lessonId?: string; t
       let courseId: string;
       let lessonId: string | null = null;
       if (input.lessonId) {
-        const l = await assertLessonOwner(input.lessonId, t.id);
+        // 仅浏览的老师也可以就这个课时提问（AI 只能读，修改会被工具拒绝）
+        const l = await assertLessonOwner(input.lessonId, t.id, "view");
         courseId = l.courseId;
         lessonId = l.id;
       } else courseId = (await getTeacherCourse(t.id)).course.id;

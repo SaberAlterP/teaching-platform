@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireTeacher } from "@/lib/auth";
-import { getTeacherCourse, teachesCourse } from "@/lib/course";
+import { getEditableCourse, teachesCourse } from "@/lib/course";
 
 function refresh() {
   revalidatePath("/teacher/announcements");
@@ -12,7 +12,7 @@ function refresh() {
 
 export async function postAnnouncement(fd: FormData) {
   const t = await requireTeacher();
-  const { course } = await getTeacherCourse(t.id);
+  const { course } = await getEditableCourse(t.id);
   const title = String(fd.get("title") ?? "").trim().slice(0, 100);
   const body = String(fd.get("body") ?? "").trim().slice(0, 2000);
   if (!title) return;
@@ -20,7 +20,7 @@ export async function postAnnouncement(fd: FormData) {
   refresh();
 }
 
-// 只能动自己创建或协作的课程里的公告
+// 只能动自己创建或共建的课程里的公告（仅浏览的老师不行）
 async function ownAnnouncement(id: string, teacherId: string) {
   const [row] = await db
     .select({ id: schema.announcements.id, pinned: schema.announcements.pinned })

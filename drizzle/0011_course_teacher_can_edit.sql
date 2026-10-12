@@ -1,0 +1,1 @@
+ALTER TABLE "course_teachers" ADD COLUMN "can_edit" boolean DEFAULT true NOT NULL;
