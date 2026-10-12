@@ -28,6 +28,11 @@ export default async function TeacherHome() {
     .innerJoin(schema.classes, eq(schema.classes.id, schema.enrollments.classId))
     .where(inArray(schema.classes.courseId, ids))
     .groupBy(schema.classes.courseId);
+  // 别人创建、邀请我协作的课程，方块上注明创建者
+  const ownerIds = [...new Set(courses.filter((c) => c.teacherId !== t.id).map((c) => c.teacherId))];
+  const owners = ownerIds.length
+    ? new Map((await db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).where(inArray(schema.users.id, ownerIds))).map((u) => [u.id, u.name]))
+    : new Map<string, string>();
   const stat = (cid: string) => {
     const rows = lessonRows.filter((r) => r.courseId === cid);
     const num = (s: string) => rows.filter((r) => r.status === s).reduce((a, r) => a + r.n, 0);
@@ -70,7 +75,9 @@ export default async function TeacherHome() {
                       {s.draft > 0 && <span className="rounded-md bg-amber-50 px-2 py-1 text-amber-700">{s.draft} 草稿</span>}
                     </div>
                   )}
-                  <div className="mt-2 text-xs text-slate-400">学生 {s.students} 人</div>
+                  <div className="mt-2 text-xs text-slate-400">
+                    学生 {s.students} 人{c.teacherId !== t.id && ` · 协作课程（${owners.get(c.teacherId) ?? "其他老师"}创建）`}
+                  </div>
                 </CourseCard>
               </PendingButton>
             </form>
