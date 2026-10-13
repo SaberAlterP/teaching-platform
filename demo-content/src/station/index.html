@@ -123,6 +123,8 @@ label.ck { display: flex; gap: 6px; align-items: flex-start; font-size: 13px; ma
 @keyframes tin { from { opacity: 0; transform: translateY(-8px); } }
 #tip { position: fixed; z-index: 15; pointer-events: none; background: #fff; border: 2px solid var(--line); border-radius: 8px; padding: 2px 8px; font-size: 12px; white-space: nowrap; display: none; }
 #hint { position: fixed; left: 250px; bottom: 12px; z-index: 7; background: rgba(31,42,58,.72); color: #fff; border-radius: 99px; padding: 5px 12px; font-size: 12px; }
+body.locked #cross { width: 14px; height: 14px; margin: -7px 0 0 -7px; background: none; border: 2px solid #fff; box-shadow: 0 0 0 1.5px rgba(0,0,0,.45), inset 0 0 0 1.5px rgba(0,0,0,.45); }
+body.locked.aim #cross { border-color: #3b82f6; width: 20px; height: 20px; margin: -10px 0 0 -10px; }
 #cross { position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,.8); box-shadow: 0 0 0 1.5px rgba(0,0,0,.35); z-index: 5; pointer-events: none; }
 
 /* 全屏弹层 */
@@ -184,7 +186,7 @@ kbd { color: #1f2a3a; border: 1px solid #b8c2cf; border-bottom-width: 2px; borde
   <span class="ttl">校园快递驿站 · 岗位实训仿真</span>
   <span id="clock">07:50</span><span id="phase">岗前准备</span>
   <span class="grow"></span>
-  <button id="bTasks">岗位任务</button><button id="bDex">设备图鉴</button><button id="bHelp">操作说明</button><button id="bEnd" class="primary">结算</button>
+  <button id="bLook" hidden>鼠标视角：开</button><button id="bTasks">岗位任务</button><button id="bDex">设备图鉴</button><button id="bHelp">操作说明</button><button id="bEnd" class="primary">结算</button>
 </div>
 <div id="task" class="panel">
   <div class="th"><span id="taskName">自由参观</span><span id="taskRole">点「岗位任务」开始一个班次</span></div>

@@ -176,9 +176,43 @@ const cvs = renderer.domElement;
 let down = null;
 const tip = $("#tip");
 cvs.addEventListener("contextmenu", (e) => e.preventDefault()); // 右键拖动也能转视角
+// ---------- 鼠标视角（像第一人称游戏）：点一下画面锁定鼠标，移动鼠标就转视角，用准星点物体 ----------
+const canLock = "requestPointerLock" in cvs && !mobile;
+let lookMode = canLock;
+const isLocked = () => document.pointerLockElement === cvs;
+// 题目、对话、设备屏幕等需要鼠标点按钮时，自动释放鼠标
+function needsCursor() {
+  if (overlay.open || !$("#dialog").hidden || $("#qbox").children.length) return true;
+  const d = $("#device");
+  if (!d.hidden && d.dataset.dex !== "1" && d.querySelector("[data-act]:not(:disabled),[data-cell]:not(:disabled),input:not(:disabled),select")) return true;
+  return !!$("#instrBtns").querySelector("button:not([data-soft])");
+}
+let lockAsked = 0;
+function lockMouse() {
+  if (!lookMode || isLocked() || needsCursor() || performance.now() - lockAsked < 400) return;
+  lockAsked = performance.now();
+  try { const r = cvs.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch { /* 浏览器不允许时保持拖动模式 */ }
+}
+function updateLookUI() {
+  const locked = isLocked();
+  document.body.classList.toggle("locked", locked);
+  $("#bLook").hidden = !canLock;
+  $("#bLook").textContent = lookMode ? "鼠标视角：开" : "鼠标视角：关";
+  $("#hint").innerHTML = locked
+    ? "移动鼠标转视角 · 准星对准物体<b>点击</b>操作 · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动 · <kbd>Esc</kbd> 释放鼠标"
+    : lookMode
+      ? "<b>点一下画面</b>进入鼠标视角（移动鼠标就能转身）· 也可按住鼠标拖动 · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动"
+      : "按住鼠标拖动环视（或 <kbd>Q</kbd><kbd>E</kbd> 转身）· <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动 · 点地面走过去 · 点发光物体操作";
+}
+let lockedAt = 0;
+document.addEventListener("pointerlockchange", () => { lockedAt = performance.now(); updateLookUI(); tip.style.display = "none"; });
+$("#bLook").onclick = () => { lookMode = !lookMode; if (!lookMode && isLocked()) document.exitPointerLock(); updateLookUI(); };
+updateLookUI();
+
 cvs.addEventListener("pointerdown", (e) => {
   // 阻止浏览器默认的选中文字/拖拽行为：它们会中断后续的移动事件，表现为“拖不动视角”
   e.preventDefault();
+  if (isLocked()) { if (e.button === 0) onClick(innerWidth / 2, innerHeight / 2); return; } // 锁定时：准星处点击
   if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); // 让 WASD 回到场景
   down = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, drag: false, id: e.pointerId, btn: e.button };
   try { cvs.setPointerCapture(e.pointerId); } catch { /* 个别浏览器不支持也没关系，下面在 window 上监听移动 */ }
@@ -191,6 +225,15 @@ addEventListener("pointercancel", endDrag);
 addEventListener("blur", () => { down = null; });
 // 移动监听在 window 上：指针滑到面板、准星上也不会丢
 addEventListener("pointermove", (e) => {
+  if (isLocked()) {
+    // 刚锁定时部分浏览器会报一次很大的位移，忽略；单次位移也限幅，防止视角乱跳
+    if (P.mode !== "fly" && performance.now() - lockedAt > 120) {
+      const k = 0.0022, cl = (v) => Math.max(-120, Math.min(120, v || 0));
+      e = { movementX: cl(e.movementX), movementY: cl(e.movementY) };
+      P.yaw -= (e.movementX || 0) * k; P.pitch = THREE.MathUtils.clamp(P.pitch - (e.movementY || 0) * k, -1.35, 1.0);
+    }
+    return;
+  }
   if (down) {
     if (e.pointerId !== down.id) return;
     if (e.pointerType === "mouse" && e.buttons === 0) { down = null; return; } // 鼠标在窗口外松开了
@@ -210,10 +253,13 @@ addEventListener("pointermove", (e) => {
 cvs.addEventListener("pointerleave", () => { hoverXY = null; tip.style.display = "none"; });
 addEventListener("pointerup", (e) => {
   const d = endDrag(e);
-  if (d && !d.drag && d.btn === 0) onClick(e.clientX, e.clientY);
+  if (!d || d.drag || d.btn !== 0) return;
+  // 鼠标视角开着、又没有面板要点时，单击画面 = 进入鼠标视角；否则照常点选
+  if (lookMode && !needsCursor()) lockMouse(); else onClick(e.clientX, e.clientY);
 });
 let hoverXY = null, hoverFrame = 0;
 function updateHover() {
+  if (isLocked()) hoverXY = [innerWidth / 2, innerHeight / 2];
   if (!hoverXY || down) return;
   const h = pickAt(hoverXY[0], hoverXY[1]);
   const n = h && !h.floor ? nameOf(h) : "";
@@ -221,6 +267,7 @@ function updateHover() {
   cvs.style.cursor = n ? "pointer" : "default";
   if (n) { tip.textContent = (targetHit ? "👉 " : "") + n; tip.style.display = "block"; tip.style.left = hoverXY[0] + 14 + "px"; tip.style.top = hoverXY[1] + 12 + "px"; }
   else tip.style.display = "none";
+  document.body.classList.toggle("aim", !!n && isLocked());
 }
 function matchTarget(h) {
   if (!clickWait) return null;
@@ -465,7 +512,10 @@ renderer.setAnimationLoop((now) => {
     beacon.userData.arrow.position.y = 1.9 + Math.sin(elapsed * 3) * 0.12; beacon.userData.arrow.rotation.y += dt * 2;
     beacon.userData.ring.scale.setScalar(1 + Math.sin(elapsed * 4) * 0.08);
   }
-  if ((hoverFrame = (hoverFrame + 1) % 3) === 0) updateHover();
+  if ((hoverFrame = (hoverFrame + 1) % 3) === 0) {
+    if (isLocked() && needsCursor()) document.exitPointerLock();
+    updateHover();
+  }
   if (hoverFrame === 1) drawMap(elapsed);
   camera.getWorldDirection(fwd);
   if (composer) composer.render(dt); else renderer.render(scene, camera);
@@ -486,7 +536,7 @@ const G = {
       release();
       setBeacon(st.stand[0], st.stand[1]);
       panel.instr((text || `前往 <b>${st.name}</b>`) + `<span class="tip">跟着地面蓝色光圈走（小地图上也有标记），或点「自动前往」。</span>`);
-      panel.btns([{ label: "自动前往", primary: true, fn: () => walkTo(st.stand[0], st.stand[1]) }]);
+      panel.btns([{ label: "自动前往", primary: true, soft: true, fn: () => walkTo(st.stand[0], st.stand[1]) }]);
       await until(() => G.dist(st.stand[0], st.stand[1]) < 0.9);
       clearBeacon(); panel.btns([]); panel.instr("");
     }

@@ -184,7 +184,7 @@ async function taskPrep() {
   begin("prep");
   stepOn(0);
   G.mentor.at(1.6, 5.6, PI);
-  await G.goto(ST.hall, "欢迎来到校园驿站！先<b>走进驿站大厅</b>（按住鼠标左键或右键拖动转身，Q/E 也能转；W/S 前后走，或点地面）。");
+  await G.goto(ST.hall, "欢迎来到校园驿站！先<b>走进驿站大厅</b>（点一下画面后移动鼠标转身；W/S 前后走，或用准星点地面走过去）。");
   G.mentor.face(G.P.x, G.P.z);
   await talk(MENTOR, "你好，我是驿站的企业导师王师傅。今天你跟一个完整班次：<b>早班到件入库 → 上架 → 午间取件高峰 → 下午寄件 → 问题件处理</b>，最后写一份流程优化提案。");
   await talk(MENTOR, "工牌上是你的实训工号 <b>" + WORKER_ID + "</b>，登录 PDA 要用。先带你认认场地。");
@@ -215,7 +215,7 @@ async function taskPrep() {
   const refresh = () => {
     const l = left();
     panel.instr(`在驿站里找到并<b>点击 8 种设备</b>（会发蓝光），右侧会显示它的作用、标准操作和常见错误。<br>已认识 <b>${8 - l.length}/8</b>${l.length ? "：还差 " + l.map((d) => d.name).join("、") : ""}<span class="tip">智能快递柜在门外右侧。</span>`);
-    panel.btns(l.length ? [{ label: "带我去下一台", primary: true, fn: () => { const n = left()[0]; if (n) G.walkTo(...stands[n.key]); } }] : []);
+    panel.btns(l.length ? [{ label: "带我去下一台", primary: true, soft: true, fn: () => { const n = left()[0]; if (n) G.walkTo(...stands[n.key]); } }] : []);
   };
   G.devHook = (k) => { G.hl(devObjs[k], false); setTimeout(refresh, 0); return false; };
   refresh();
@@ -490,7 +490,7 @@ async function taskShelf() {
   const t0 = performance.now();
   const refresh = () => panel.instr(`巡检货架区：找出 <b>2 处不规范</b>并处理（已发现 ${found.size}/2）。<span class="tip">走到货架之间仔细看；点在库包裹可以看到它的取件码。</span>`);
   refresh();
-  panel.btns([{ label: "我找不到，给点提示", fn: () => { [fallen, inward].forEach((o) => !found.has(o) && G.hl(o, true)); toast("发光的就是"); } }]);
+  panel.btns([{ label: "我找不到，给点提示", soft: true, fn: () => { [fallen, inward].forEach((o) => !found.has(o) && G.hl(o, true)); toast("发光的就是"); } }]);
   while (found.size < 2) {
     const r = await G.clickOn([fallen, inward].filter((o) => !found.has(o)), { hl: false, onOther: (h) => { if (h.filler) { wrongClicks++; toast(`${h.filler.code}：摆放正常`); return true; } return false; } });
     const o = r.target;
@@ -1081,7 +1081,7 @@ function taskMenu() {
 }
 function help() {
   const card = overlay.show(`<span class="tag2">操作说明</span><h1>怎么操作</h1>
-    <p>🖱 <b>按住鼠标左键或右键拖动</b>：转身、抬头低头；键盘 <kbd>Q</kbd><kbd>E</kbd> 或 ←→ 也能左右转。<br>⌨ <kbd>W</kbd><kbd>S</kbd><kbd>A</kbd><kbd>D</kbd> 或 ↑↓：走动；按住 <kbd>Shift</kbd> 快走。<br>👆 <b>点地面</b>：自动走过去；点<b>左下角小地图</b>也能走过去。<br>✨ <b>发蓝光的物体</b>：当前要操作的对象，点击即可。鼠标停在物体上会显示名称。<br>📟 右侧是设备屏幕（PDA、终端、快递柜、电脑），在上面输入和按键。<br>💬 底部是和顾客、导师的对话，选择你的回答。</p>
+    <p>🖱 <b>鼠标视角（默认开启）</b>：点一下画面锁定鼠标，之后<b>移动鼠标就能转视角</b>，用屏幕中央的准星对准物体点击；遇到题目、对话、设备屏幕时鼠标会自动放出来，答完再点一下画面即可继续；随时按 <kbd>Esc</kbd> 放出鼠标。不习惯可点顶栏「鼠标视角」关掉，改为按住鼠标拖动转身。键盘 <kbd>Q</kbd><kbd>E</kbd> 或 ←→ 也能左右转。<br>⌨ <kbd>W</kbd><kbd>S</kbd><kbd>A</kbd><kbd>D</kbd> 或 ↑↓：走动；按住 <kbd>Shift</kbd> 快走。<br>👆 <b>点地面</b>：自动走过去；点<b>左下角小地图</b>也能走过去。<br>✨ <b>发蓝光的物体</b>：当前要操作的对象，点击即可。鼠标停在物体上会显示名称。<br>📟 右侧是设备屏幕（PDA、终端、快递柜、电脑），在上面输入和按键。<br>💬 底部是和顾客、导师的对话，选择你的回答。</p>
     <p>评分五个维度：流程完整性 25%、设备操作正确性 25%、业务准确率 25%、异常处置 15%、优化提案 10%。随时可以点「结算」看成绩，平台保留最高分。</p>
     <div class="row-btns"><button class="primary" id="hClose">知道了</button></div>`);
   card.querySelector("#hClose").onclick = () => overlay.hide();
@@ -1095,7 +1095,7 @@ function start() {
     <h1>校园快递驿站 · 岗位实训仿真</h1>
     <p>进驿站实训之前，先在这个虚拟驿站里<b>跟一个完整班次</b>：认识五个作业区和 8 种设备，亲手完成<b>入库 → 上架 → 出库服务 → 寄件 → 问题件处理</b>，最后写一份流程优化提案。到了真驿站，直接上手。</p>
     <div class="grid2">${Object.values(ZONES).map((z) => `<div class="tcard" style="cursor:default"><b style="color:${z.color}">${z.name}</b><small>${z.duty}</small></div>`).join("")}</div>
-    <p style="font-size:13px;color:#5b6676">操作：按住鼠标拖动环视（Q/E 也能转身），WASD 走动，点地面自动走过去，点发光物体操作。建议<b>全屏</b>体验。成绩自动上报，平台保留最高分。</p>
+    <p style="font-size:13px;color:#5b6676">操作：点一下画面后移动鼠标转视角（Esc 放出鼠标），WASD 走动，点地面自动走过去，点发光物体操作。建议<b>全屏</b>体验。成绩自动上报，平台保留最高分。</p>
     <div class="row-btns"><button class="primary" id="sShift">开始完整班次（推荐）</button><button id="sRole">按岗位选择任务</button><button id="sFree">先自由参观</button></div>`);
   card.querySelector("#sShift").onclick = () => runShift();
   card.querySelector("#sRole").onclick = () => taskMenu();
