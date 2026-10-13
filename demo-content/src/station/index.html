@@ -7,7 +7,7 @@
 <style>
 :root { --ink: #1f2a3a; --line: #243447; --brand: #2f6fed; --ok: #1f9d55; --bad: #d64545; --warn: #d97706; --muted: #5b6676; --soft: #eef2f7; }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; color: var(--ink); background: #cfd8e3; }
+html, body { margin: 0; height: 100%; overflow: hidden; -webkit-user-select: none; user-select: none; font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; color: var(--ink); background: #cfd8e3; }
 #scene { position: fixed; inset: 0; }
 #scene canvas { display: block; touch-action: none; }
 button { font: inherit; cursor: pointer; border: 2px solid var(--line); background: #fff; color: var(--ink); border-radius: 10px; padding: 5px 12px; }
@@ -56,6 +56,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .chips button { font-size: 13px; padding: 4px 9px; }
 .seq { min-height: 36px; border: 2px dashed #b8c2cf; border-radius: 10px; padding: 6px; margin: 6px 0; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
 .seq span { background: #e8f0ff; border-radius: 6px; padding: 2px 8px; }
+input, textarea { -webkit-user-select: text; user-select: text; }
 textarea, input[type=text], input[type=number], select { font: inherit; border: 2px solid var(--line); border-radius: 8px; padding: 5px 8px; width: 100%; }
 textarea { min-height: 120px; resize: vertical; font-size: 14px; line-height: 1.6; }
 label.ck { display: flex; gap: 6px; align-items: flex-start; font-size: 13px; margin: 4px 0; cursor: pointer; }
@@ -195,7 +196,7 @@ kbd { color: #1f2a3a; border: 1px solid #b8c2cf; border-bottom-width: 2px; borde
 <div id="dialog" class="panel" hidden><div class="who"></div><div class="say"></div><div class="opts"></div></div>
 <div id="toast"></div>
 <div id="tip"></div>
-<div id="hint">拖动画面环视 · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>/方向键移动 · 点地面走过去 · 点发光物体操作</div>
+<div id="hint">按住鼠标拖动环视（或 <kbd>Q</kbd><kbd>E</kbd>/←→ 转身）· <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>/方向键移动 · 点地面走过去 · 点发光物体操作</div>
 <div id="overlay" hidden><div class="card" id="ovCard"></div></div>
 <script>/*BUNDLE*/</script>
 </body>

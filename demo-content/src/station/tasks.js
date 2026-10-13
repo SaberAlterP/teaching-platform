@@ -184,7 +184,7 @@ async function taskPrep() {
   begin("prep");
   stepOn(0);
   G.mentor.at(1.6, 5.6, PI);
-  await G.goto(ST.hall, "欢迎来到校园驿站！先<b>走进驿站大厅</b>（拖动画面转身，W/S 前后走，或点地面）。");
+  await G.goto(ST.hall, "欢迎来到校园驿站！先<b>走进驿站大厅</b>（按住鼠标左键或右键拖动转身，Q/E 也能转；W/S 前后走，或点地面）。");
   G.mentor.face(G.P.x, G.P.z);
   await talk(MENTOR, "你好，我是驿站的企业导师王师傅。今天你跟一个完整班次：<b>早班到件入库 → 上架 → 午间取件高峰 → 下午寄件 → 问题件处理</b>，最后写一份流程优化提案。");
   await talk(MENTOR, "工牌上是你的实训工号 <b>" + WORKER_ID + "</b>，登录 PDA 要用。先带你认认场地。");
@@ -1081,7 +1081,7 @@ function taskMenu() {
 }
 function help() {
   const card = overlay.show(`<span class="tag2">操作说明</span><h1>怎么操作</h1>
-    <p>🖱 <b>拖动画面</b>：转身、抬头低头。<br>⌨ <kbd>W</kbd><kbd>S</kbd><kbd>A</kbd><kbd>D</kbd> 或方向键：走动；按住 <kbd>Shift</kbd> 快走。<br>👆 <b>点地面</b>：自动走过去；点<b>左下角小地图</b>也能走过去。<br>✨ <b>发蓝光的物体</b>：当前要操作的对象，点击即可。鼠标停在物体上会显示名称。<br>📟 右侧是设备屏幕（PDA、终端、快递柜、电脑），在上面输入和按键。<br>💬 底部是和顾客、导师的对话，选择你的回答。</p>
+    <p>🖱 <b>按住鼠标左键或右键拖动</b>：转身、抬头低头；键盘 <kbd>Q</kbd><kbd>E</kbd> 或 ←→ 也能左右转。<br>⌨ <kbd>W</kbd><kbd>S</kbd><kbd>A</kbd><kbd>D</kbd> 或 ↑↓：走动；按住 <kbd>Shift</kbd> 快走。<br>👆 <b>点地面</b>：自动走过去；点<b>左下角小地图</b>也能走过去。<br>✨ <b>发蓝光的物体</b>：当前要操作的对象，点击即可。鼠标停在物体上会显示名称。<br>📟 右侧是设备屏幕（PDA、终端、快递柜、电脑），在上面输入和按键。<br>💬 底部是和顾客、导师的对话，选择你的回答。</p>
     <p>评分五个维度：流程完整性 25%、设备操作正确性 25%、业务准确率 25%、异常处置 15%、优化提案 10%。随时可以点「结算」看成绩，平台保留最高分。</p>
     <div class="row-btns"><button class="primary" id="hClose">知道了</button></div>`);
   card.querySelector("#hClose").onclick = () => overlay.hide();
@@ -1095,7 +1095,7 @@ function start() {
     <h1>校园快递驿站 · 岗位实训仿真</h1>
     <p>进驿站实训之前，先在这个虚拟驿站里<b>跟一个完整班次</b>：认识五个作业区和 8 种设备，亲手完成<b>入库 → 上架 → 出库服务 → 寄件 → 问题件处理</b>，最后写一份流程优化提案。到了真驿站，直接上手。</p>
     <div class="grid2">${Object.values(ZONES).map((z) => `<div class="tcard" style="cursor:default"><b style="color:${z.color}">${z.name}</b><small>${z.duty}</small></div>`).join("")}</div>
-    <p style="font-size:13px;color:#5b6676">操作：拖动画面环视，WASD/方向键走动，点地面自动走过去，点发光物体操作。建议<b>全屏</b>体验。成绩自动上报，平台保留最高分。</p>
+    <p style="font-size:13px;color:#5b6676">操作：按住鼠标拖动环视（Q/E 也能转身），WASD 走动，点地面自动走过去，点发光物体操作。建议<b>全屏</b>体验。成绩自动上报，平台保留最高分。</p>
     <div class="row-btns"><button class="primary" id="sShift">开始完整班次（推荐）</button><button id="sRole">按岗位选择任务</button><button id="sFree">先自由参观</button></div>`);
   card.querySelector("#sShift").onclick = () => runShift();
   card.querySelector("#sRole").onclick = () => taskMenu();
