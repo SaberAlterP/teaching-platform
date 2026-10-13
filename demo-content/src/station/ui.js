@@ -74,6 +74,7 @@ export const panel = {
     for (const b of list) {
       const el = document.createElement("button");
       el.textContent = b.label; if (b.primary) el.className = "primary";
+      if (b.soft) el.dataset.soft = "1"; // 可有可无的按钮：出现时不打断鼠标视角
       el.onclick = b.fn; box.appendChild(el);
     }
   },
