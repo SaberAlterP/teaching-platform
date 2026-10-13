@@ -188,6 +188,9 @@ export const aiGlobalSettings = pgTable("ai_global_settings", {
   model: text("model").notNull().default("deepseek-flash"),
   baseUrl: text("base_url").notNull().default("https://api.deepseek.com"),
   thinking: boolean("thinking").notNull().default(true),
+  // 每日用量上限（折算 token，按北京时间的自然日；0 = 不限制）
+  dailyLimitPerTeacher: integer("daily_limit_per_teacher").notNull().default(5_000_000),
+  dailyLimitTotal: integer("daily_limit_total").notNull().default(20_000_000),
   updatedAt: updatedAt(),
 });
 

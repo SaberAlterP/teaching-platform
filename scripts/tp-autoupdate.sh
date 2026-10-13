@@ -8,6 +8,8 @@ DIR=/home/admin/teaching-platform
 LAST=/var/lib/tp-autoupdate.last
 LOG=/var/log/tp-autoupdate.log
 MIN_FREE_MB=1200
+MIN_DISK_MB=3000        # 硬盘剩余不到这么多就不更新（构建要几个 GB 临时空间，写满会让网站瘫痪）
+BACKUP_DIR=/home/admin/backups
 
 exec 9>/var/lock/tp-autoupdate.lock
 flock -n 9 || exit 0
@@ -34,6 +36,12 @@ if [ "$FREE_MB" -lt "$MIN_FREE_MB" ]; then
   exit 1
 fi
 
+DISK_MB=$(df -Pm "$DIR" | awk 'NR==2 {print $4}')
+if [ "$DISK_MB" -lt "$MIN_DISK_MB" ]; then
+  log "硬盘只剩 ${DISK_MB}MB，不够构建，取消更新（网站未受影响）。请先清理硬盘（旧备份、docker image prune -a）"
+  exit 1
+fi
+
 # 记下当前正在运行的镜像，新版本起不来时用它恢复
 APP_CID=$(compose ps -q app 2>/dev/null)
 OLD_IMAGE=$(docker inspect --format '{{.Image}}' "$APP_CID" 2>/dev/null)
@@ -43,6 +51,19 @@ IMAGE_NAME=$(docker inspect --format '{{.Config.Image}}' "$APP_CID" 2>/dev/null)
 # 网站保持运行，直接构建新镜像
 if ! timeout 30m docker compose -f "$DIR/docker-compose.yml" build >> "$LOG" 2>&1; then
   log "构建失败，网站仍在运行旧版本"
+  exit 1
+fi
+
+# 新版本启动时会自动执行数据库迁移，回滚镜像撤不掉迁移，所以换容器前先备份一次数据库（只留最近 3 份）
+mkdir -p "$BACKUP_DIR"
+PRE="$BACKUP_DIR/pre-update_$(date +%F_%H%M)_${REMOTE:0:7}.sql.gz"
+if compose exec -T db pg_dump -U tp teaching 2>>"$LOG" | gzip > "$PRE" && [ -s "$PRE" ]; then
+  chown admin:admin "$PRE" 2>/dev/null
+  ls -1t "$BACKUP_DIR"/pre-update_*.sql.gz 2>/dev/null | tail -n +4 | xargs -r rm -f
+  log "更新前备份完成 $(basename "$PRE")"
+else
+  rm -f "$PRE"
+  log "更新前备份失败，取消更新（网站仍在运行旧版本）"
   exit 1
 fi
 

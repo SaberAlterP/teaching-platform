@@ -1,0 +1,2 @@
+ALTER TABLE "ai_global_settings" ADD COLUMN "daily_limit_per_teacher" integer DEFAULT 5000000 NOT NULL;--> statement-breakpoint
+ALTER TABLE "ai_global_settings" ADD COLUMN "daily_limit_total" integer DEFAULT 20000000 NOT NULL;

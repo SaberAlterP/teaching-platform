@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { eq, or } from "drizzle-orm";
 import { db, schema } from "@/db";
 import {
-  checkPassword, clearLoginFailures, endSession, isDefaultStudentPassword, loginBlocked, mustChangeNow, recordLoginFailure, startSession,
+  accountLocked, checkPassword, clearLoginFailures, hasLoginFailures, loginOverloaded, endSession, isDefaultStudentPassword, loginBlocked, mustChangeNow, recordLoginFailure, startSession,
 } from "@/lib/auth";
 
 export async function loginAction(_: { error: string }, fd: FormData) {
@@ -19,8 +19,13 @@ export async function loginAction(_: { error: string }, fd: FormData) {
   // 拿不到真实 IP 时（"direct"）所有人共用一个来源，不能按 IP 锁，否则一个人输错就把全校锁在外面
   const keys = ip === "direct" ? [key] : [key, `ip:${ip}`];
 
-  const wait = loginBlocked(...keys);
+  // 有真实 IP 时：账号或 IP 任一被锁都直接拒绝。
+  // 拿不到真实 IP 时：账号被锁只拦错误密码（见 accountLocked），避免被人故意输错来锁别人的账号。
+  const soft = ip === "direct" && accountLocked(key);
+  const wait = soft ? 0 : loginBlocked(...keys);
   if (wait) return { error: `尝试次数过多，请 ${wait} 分钟后再试` };
+  // 全站正被大量乱试时，对已经失败过的账号不再校验密码
+  if ((soft || hasLoginFailures(key)) && loginOverloaded()) return { error: "现在登录的人太多，请 1 分钟后再试" };
 
   // 老师可以用邮箱登录
   const user = await db.query.users.findFirst({
@@ -30,7 +35,7 @@ export async function loginAction(_: { error: string }, fd: FormData) {
   });
   if (!user || !(await checkPassword(password, user.passwordHash))) {
     recordLoginFailure(...keys);
-    return { error: "账号或密码错误" };
+    return { error: soft ? "尝试次数过多，请 10 分钟后再试（密码正确时仍可登录）" : "账号或密码错误" };
   }
   // 密码对了才提示身份不符，避免被人拿来探测账号
   if (user.role === "TEACHER" && as !== "teacher") return { error: "这是老师账号，请切换到上面的「我是老师」登录" };

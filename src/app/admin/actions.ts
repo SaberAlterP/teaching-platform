@@ -10,7 +10,7 @@ import { setSignupMode, type SignupMode } from "@/lib/site";
 type Result<T = object> = ({ error?: undefined } & T) | { error: string };
 const fail = (e: unknown) => ({ error: (e as Error).message || "出错了" });
 
-export async function saveSettings(input: { apiKey?: string; model: string; baseUrl: string; thinking: boolean }): Promise<Result> {
+export async function saveSettings(input: { apiKey?: string; model: string; baseUrl: string; thinking: boolean; dailyLimitPerTeacher: number; dailyLimitTotal: number }): Promise<Result> {
   try {
     await requireAdmin();
     await saveAiSettings(input);
