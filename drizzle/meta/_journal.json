@@ -85,6 +85,13 @@
       "when": 1791795160252,
       "tag": "0011_course_teacher_can_edit",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791901629188,
+      "tag": "0012_ai_daily_limit",
+      "breakpoints": true
     }
   ]
 }

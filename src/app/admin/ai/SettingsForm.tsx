@@ -3,7 +3,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { saveSettings, testSettings } from "../actions";
 
-type Init = { hasKey: boolean; keyHint: string; keyBroken: boolean; model: string; baseUrl: string; thinking: boolean };
+type Init = { hasKey: boolean; keyHint: string; keyBroken: boolean; model: string; baseUrl: string; thinking: boolean; dailyLimitPerTeacher: number; dailyLimitTotal: number; usedToday: number };
 
 export function SettingsForm({ initial, models }: { initial: Init; models: string[] }) {
   const router = useRouter();
@@ -11,13 +11,15 @@ export function SettingsForm({ initial, models }: { initial: Init; models: strin
   const [model, setModel] = useState(initial.model);
   const [baseUrl, setBaseUrl] = useState(initial.baseUrl);
   const [thinking, setThinking] = useState(initial.thinking);
+  const [perTeacher, setPerTeacher] = useState(String(initial.dailyLimitPerTeacher));
+  const [total, setTotal] = useState(String(initial.dailyLimitTotal));
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
 
   const save = (extra: { apiKey?: string } = {}) =>
     start(async () => {
       setMsg(null);
-      const r = await saveSettings({ model, baseUrl, thinking, ...(key.trim() ? { apiKey: key.trim() } : {}), ...extra });
+      const r = await saveSettings({ model, baseUrl, thinking, dailyLimitPerTeacher: Number(perTeacher) || 0, dailyLimitTotal: Number(total) || 0, ...(key.trim() ? { apiKey: key.trim() } : {}), ...extra });
       if (r.error) return setMsg({ ok: false, text: r.error });
       setKey("");
       setMsg({ ok: true, text: "已保存" });
@@ -67,6 +69,21 @@ export function SettingsForm({ initial, models }: { initial: Init; models: strin
           <span className="block text-xs text-slate-400">先思考再动手，做动画和建课质量更好；关掉更快、更省。</span>
         </span>
       </label>
+
+      <div>
+        <label className="label">每日用量上限（折算 token，0 = 不限制）</label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-sm text-slate-500">每位老师每天
+            <input className="input mt-1 font-mono" type="number" min={0} value={perTeacher} onChange={(e) => setPerTeacher(e.target.value)} />
+          </label>
+          <label className="text-sm text-slate-500">全站每天合计
+            <input className="input mt-1 font-mono" type="number" min={0} value={total} onChange={(e) => setTotal(e.target.value)} />
+          </label>
+        </div>
+        <p className="mt-1 text-xs text-slate-400">
+          超过后 AI 会暂停，提示明天再继续（北京时间 0 点重新计算）。折算方式：没命中缓存的输入 + 输出，命中缓存的输入按十分之一算。全站今天已用 {initial.usedToday.toLocaleString()}。
+        </p>
+      </div>
 
       <details className="text-sm">
         <summary className="cursor-pointer text-slate-500">高级：接口地址</summary>

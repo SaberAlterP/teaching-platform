@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { teachesCourse, viewsCourse } from "@/lib/course";
 import { AiError, streamChat, type ApiMessage, type ToolCall } from "./deepseek";
-import { getAiSettings, recordAiUsage } from "./settings";
+import { dailyLimitMessage, getAiSettings, recordAiUsage } from "./settings";
 import { listSkills } from "./skills";
 import { parseArgs, runTool, toolConfirm, TOOL_DEFS, type PreviewReport, type ToolCtx } from "./tools";
 
@@ -273,7 +273,9 @@ async function run(chatId: string, job: Job) {
       const last = messages[messages.length - 1];
       if (last?.role === "assistant" && !last.tool_calls?.length) break;
 
-      // 3. 调用模型
+      // 3. 调用模型（先看今天的用量有没有超过上限）
+      const over = await dailyLimitMessage(chat.teacherId);
+      if (over) throw new AiError(over);
       live.phase = "waiting-model";
       live.reasoning = "";
       live.content = "";
