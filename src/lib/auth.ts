@@ -121,7 +121,26 @@ export function loginBlocked(...keys: string[]): number {
   }
   return wait;
 }
+// 账号是否在“锁定”状态（不看 IP 那一层）。拿不到真实 IP 时只用它：锁只拦错误密码，
+// 密码对的人仍能登录，这样别人随手乱试也锁不住你的账号。
+export const accountLocked = (key: string) => loginBlocked(key) > 0;
+export const hasLoginFailures = (key: string) => {
+  const a = attempts.get(key);
+  return !!a && a.until >= Date.now();
+};
+
+// 全站最近 1 分钟的失败次数。太多说明有人在批量乱试：此时对已经失败过的账号直接拒绝，不再跑 bcrypt，省得把 2 核服务器拖慢
+const failTimes: number[] = [];
+const OVERLOAD_PER_MIN = 120;
+export function loginOverloaded() {
+  const cutoff = Date.now() - 60_000;
+  while (failTimes.length && failTimes[0] < cutoff) failTimes.shift();
+  return failTimes.length >= OVERLOAD_PER_MIN;
+}
+
 export function recordLoginFailure(...keys: string[]) {
+  failTimes.push(Date.now());
+  if (failTimes.length > OVERLOAD_PER_MIN * 4) failTimes.splice(0, failTimes.length - OVERLOAD_PER_MIN * 4);
   pruneExpired(attempts, (a) => a.until);
   for (const key of keys) {
     const a = attempts.get(key);
