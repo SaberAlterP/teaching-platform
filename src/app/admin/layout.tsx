@@ -18,6 +18,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         links={[
           { href: "/teacher", label: "← 返回教学" },
           { href: "/admin", label: "用量统计" },
+          { href: "/admin/courses", label: "课程统计" },
           { href: "/admin/teachers", label: "老师与管理员", badge: pending },
           { href: "/admin/ai", label: "AI 设置" },
         ]}

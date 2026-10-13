@@ -14,7 +14,7 @@ export default async function TeachersPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold">老师与管理员</h1>
-        <p className="mt-1 text-sm text-slate-500">管理员同时仍是老师，可以照常上课、改课；比普通老师多了 AI 设置和用量统计。</p>
+        <p className="mt-1 text-sm text-slate-500">管理员同时仍是老师，可以照常上课、改课；比普通老师多了 AI 设置、用量统计和全平台课程统计。</p>
       </div>
       {pending.length > 0 && (
         <section className="card border-amber-300 p-4">
