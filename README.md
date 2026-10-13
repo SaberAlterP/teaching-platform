@@ -70,7 +70,11 @@ parent.postMessage({ type: "tp:score", score: 85, max: 100 }, "*"); // 上报成
 parent.postMessage({ type: "tp:complete" }, "*");                    // 标记完成
 ```
 
-示例见 `demo-content/src/`。
+示例见 `demo-content/src/`。`npm run demo:build` 会把它们打包成 `demo-content/dist/` 下的单个 HTML 文件（自带 three.js，离线可用）：
+
+- `五种运输方式-3D.html`：滚动驱动的 3D 讲解
+- `物流调度小游戏.html`：2D 小游戏
+- `校园快递驿站-岗位实训仿真.html`：校园驿站岗位实践的虚拟预演（源码在 `demo-content/src/station/`）。一个完整的 3D 驿站场景（五个作业区 + 门外智能快递柜），学生第一人称走动、操作 PDA/自助终端/快递柜/电子秤/打印机，跟完一个班次：岗前认识设备 → 入库 → 上架 → 出库服务 → 寄件 → 问题件 → 优化提案；按流程完整性、设备操作、业务准确率、异常处置、优化提案五个维度评分并上报平台。上传时 iframe 高度建议 700。
 
 平台内置 three.js（构建时由 `scripts/build-libs.mjs` 生成到 `public/lib/`），HTML 包里可以直接引用，不用自己打包：
 
