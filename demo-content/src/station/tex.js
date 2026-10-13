@@ -98,12 +98,19 @@ export function wallTex() {
   return tex(c);
 }
 // 吊顶 600×600 矿棉板
+// 一张图 = 2×2 块。只用柔和的大块明暗，不用细密小点：细点在远处会产生摩尔纹，走动时闪烁
 export function ceilTex() {
-  const S = 256, c = cv(S, S), g = c.getContext("2d"), r = rng(31);
-  g.fillStyle = "#efede8"; g.fillRect(0, 0, S, S);
-  for (let k = 0; k < 2500; k++) { g.fillStyle = `rgba(120,115,105,${0.08 + r() * 0.15})`; g.fillRect(r() * S, r() * S, 1.4, 1.4); }
-  g.fillStyle = "#d8d5ce"; g.fillRect(0, 0, S, 4); g.fillRect(0, 0, 4, S);
-  return tex(c);
+  const S = 512, c = cv(S, S), g = c.getContext("2d"), r = rng(31);
+  g.fillStyle = "#eeece7"; g.fillRect(0, 0, S, S);
+  for (let k = 0; k < 60; k++) {
+    const x = r() * S, y = r() * S, rad = 20 + r() * 50;
+    const gr = g.createRadialGradient(x, y, 0, x, y, rad);
+    gr.addColorStop(0, `rgba(120,115,105,${0.03 + r() * 0.03})`); gr.addColorStop(1, "rgba(120,115,105,0)");
+    g.fillStyle = gr; g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+  }
+  g.fillStyle = "#cfccc5";
+  g.fillRect(0, 0, S, 6); g.fillRect(0, 0, 6, S); g.fillRect(0, S / 2 - 3, S, 6); g.fillRect(S / 2 - 3, 0, 6, S);
+  return tex(c, { aniso: 16 });
 }
 // 外墙铝板
 export function cladTex() {

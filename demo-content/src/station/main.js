@@ -175,12 +175,25 @@ function clearBeacon() { beacon.visible = false; beaconTarget = null; }
 const cvs = renderer.domElement;
 let down = null;
 const tip = $("#tip");
+cvs.addEventListener("contextmenu", (e) => e.preventDefault()); // 右键拖动也能转视角
 cvs.addEventListener("pointerdown", (e) => {
-  down = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, drag: false, id: e.pointerId };
-  cvs.setPointerCapture(e.pointerId);
+  // 阻止浏览器默认的选中文字/拖拽行为：它们会中断后续的移动事件，表现为“拖不动视角”
+  e.preventDefault();
+  if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); // 让 WASD 回到场景
+  down = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, drag: false, id: e.pointerId, btn: e.button };
+  try { cvs.setPointerCapture(e.pointerId); } catch { /* 个别浏览器不支持也没关系，下面在 window 上监听移动 */ }
 });
-cvs.addEventListener("pointermove", (e) => {
+const endDrag = (e) => {
+  if (!down || (e && e.pointerId !== undefined && e.pointerId !== down.id)) return null;
+  const d = down; down = null; return d;
+};
+addEventListener("pointercancel", endDrag);
+addEventListener("blur", () => { down = null; });
+// 移动监听在 window 上：指针滑到面板、准星上也不会丢
+addEventListener("pointermove", (e) => {
   if (down) {
+    if (e.pointerId !== down.id) return;
+    if (e.pointerType === "mouse" && e.buttons === 0) { down = null; return; } // 鼠标在窗口外松开了
     const dx = e.clientX - down.lx, dy = e.clientY - down.ly;
     if (!down.drag && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) down.drag = true;
     if (down.drag && P.mode !== "fly") {
@@ -191,13 +204,13 @@ cvs.addEventListener("pointermove", (e) => {
     tip.style.display = "none";
     return;
   }
-  hoverXY = [e.clientX, e.clientY];
+  hoverXY = e.target === cvs ? [e.clientX, e.clientY] : null;
+  if (!hoverXY) tip.style.display = "none";
 });
 cvs.addEventListener("pointerleave", () => { hoverXY = null; tip.style.display = "none"; });
-cvs.addEventListener("pointerup", (e) => {
-  if (!down) return;
-  const wasDrag = down.drag; down = null;
-  if (!wasDrag) onClick(e.clientX, e.clientY);
+addEventListener("pointerup", (e) => {
+  const d = endDrag(e);
+  if (d && !d.drag && d.btn === 0) onClick(e.clientX, e.clientY);
 });
 let hoverXY = null, hoverFrame = 0;
 function updateHover() {
@@ -396,8 +409,8 @@ renderer.setAnimationLoop((now) => {
       if (keys.has("KeyS") || keys.has("ArrowDown")) mzv -= 1;
       if (keys.has("KeyA")) mxv -= 1;
       if (keys.has("KeyD")) mxv += 1;
-      if (keys.has("ArrowLeft")) P.yaw += dt * 1.8;
-      if (keys.has("ArrowRight")) P.yaw -= dt * 1.8;
+      if (keys.has("ArrowLeft") || keys.has("KeyQ")) P.yaw += dt * 1.8;
+      if (keys.has("ArrowRight") || keys.has("KeyE")) P.yaw -= dt * 1.8;
     }
     const sp = (keys.has("ShiftLeft") || keys.has("ShiftRight") ? 4.2 : 2.4) * dt;
     if (mxv || mzv) {
@@ -416,6 +429,10 @@ renderer.setAnimationLoop((now) => {
       }
     } else if (P.mode === "auto") P.mode = "free";
     P.eye += (EYE - P.eye) * Math.min(1, dt * 4);
+  }
+  if (P.mode === "locked" && !overlay.open) {
+    if (keys.has("ArrowLeft") || keys.has("KeyQ")) P.yaw += dt * 1.8;
+    if (keys.has("ArrowRight") || keys.has("KeyE")) P.yaw -= dt * 1.8;
   }
   camera.position.set(P.x, P.eye + (P.mode === "auto" || ((P.mode === "free") && (keys.size > 0)) ? Math.sin(elapsed * 9) * 0.012 : 0), P.z);
   camera.rotation.set(P.pitch, P.yaw, 0, "YXZ");

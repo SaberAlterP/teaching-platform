@@ -71,7 +71,7 @@ export function buildWorld(scene, renderer) {
   M.floor.map.repeat.set(20, 13.33); M.floor.map.wrapS = M.floor.map.wrapT = THREE.RepeatWrapping;
   M.floor.roughnessMap.repeat.set(20, 13.33); M.floor.roughnessMap.wrapS = M.floor.roughnessMap.wrapT = THREE.RepeatWrapping;
   M.wall.map.wrapS = M.wall.map.wrapT = THREE.RepeatWrapping; M.wall.map.repeat.set(6, 1.5);
-  M.ceil.map.wrapS = M.ceil.map.wrapT = THREE.RepeatWrapping; M.ceil.map.repeat.set(40, 26.67);
+  M.ceil.map.wrapS = M.ceil.map.wrapT = THREE.RepeatWrapping; M.ceil.map.repeat.set(20, 13.33);
   M.clad.map.wrapS = M.clad.map.wrapT = THREE.RepeatWrapping;
   M.paver.map.wrapS = M.paver.map.wrapT = THREE.RepeatWrapping;
   M.grass.map.wrapS = M.grass.map.wrapT = THREE.RepeatWrapping;
@@ -167,7 +167,8 @@ export function buildWorld(scene, renderer) {
   grid.block(-12.4, -8.4, 12.4, -7.95, 0.2);
   grid.block(-12.4, 7.95, -1.25, 8.3, 0.2); grid.block(1.25, 7.95, 12.4, 8.3, 0.2);
   // 屋面与女儿墙
-  box(24.6, 0.3, 16.6, M.clad, 0, H + 0.15, 0);
+  // 屋面板底面比吊顶高 5cm，两个面不能重合，否则会闪烁（z-fighting）
+  box(24.6, 0.3, 16.6, M.clad, 0, H + 0.2, 0);
   box(24.6, 0.5, 0.15, M.clad, 0, H + 0.6, 8.25); box(24.6, 0.5, 0.15, M.clad, 0, H + 0.6, -8.25);
   // 吊顶
   const ceil = new THREE.Mesh(new THREE.PlaneGeometry(24, 16).rotateX(PI / 2), M.ceil);
