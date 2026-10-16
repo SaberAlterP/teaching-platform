@@ -1,8 +1,9 @@
 // 生成平台内置的前端库（public/lib/），供 AI 生成的 HTML 动画直接引用，不用每个动画都打包一份 three.js。
 //   /lib/three/three.module.js  three.js（压缩后的 ES module）
 //   /lib/three/addons.js        常用扩展：OrbitControls、RoundedBoxGeometry、mergeGeometries、CSS2DRenderer 等
+//   /lib/tp3d/tp3d.js           平台 3D 部件库（源码在 lib3d/）：车辆、飞机、集装器、货架、人物、场景外壳、讲解播放器、小题评分
 // 用法（HTML 里）：
-//   <script type="importmap">{"imports":{"three":"/lib/three/three.module.js","three/addons":"/lib/three/addons.js"}}</script>
+//   <script type="importmap">{"imports":{"three":"/lib/three/three.module.js","three/addons":"/lib/three/addons.js","tp3d":"/lib/tp3d/tp3d.js"}}</script>
 import { build } from "esbuild";
 import fs from "fs";
 import path from "path";
@@ -33,4 +34,10 @@ export { Sky } from "${jsm}objects/Sky.js";
 export { SimplexNoise } from "${jsm}math/SimplexNoise.js";
 `;
 await build({ ...common, stdin: { contents: addons, resolveDir: root }, external: ["three"], outfile: path.join(out, "addons.js") });
-for (const f of fs.readdirSync(out)) console.log(`public/lib/three/${f}  ${Math.round(fs.statSync(path.join(out, f)).size / 1024)}KB`);
+
+// tp3d 部件库：three 和 three/addons 不打进去，由页面的 importmap 指向上面两个文件
+const out3d = path.join(root, "public/lib/tp3d");
+fs.mkdirSync(out3d, { recursive: true });
+await build({ ...common, entryPoints: [path.join(root, "lib3d/index.js")], external: ["three", "three/addons"], outfile: path.join(out3d, "tp3d.js") });
+for (const [dir, d] of [["three", out], ["tp3d", out3d]])
+  for (const f of fs.readdirSync(d)) console.log(`public/lib/${dir}/${f}  ${Math.round(fs.statSync(path.join(d, f)).size / 1024)}KB`);

@@ -8,13 +8,14 @@ import { cleanupFiles, regradeSubmissions, validateQuiz, writeOrder } from "@/li
 import type { HtmlData, ModuleType, QuizData } from "@/lib/modules";
 import { assetDir, savePackage } from "@/lib/storage";
 import type { ToolDef } from "./deepseek";
+import { reviewScene, type SceneStats } from "./scene-check";
 import { findSkill, listSkills } from "./skills";
 import { draftInfo, draftPath, listDrafts, numbered, readDraft, staticCheck, writeDraft } from "./workspace";
 
 // AI 助手能调用的工具。每个工具：给模型看的定义、运行前是否要老师确认、运行逻辑。
 // 所有写入都只作用于该老师自己创建或共建的课程（仅浏览的课程只能读），并记录到 ai_changes，方便撤销。
 
-export type PreviewReport = { errors: string[]; scores: number[] };
+export type PreviewReport = { errors: string[]; scores: number[]; scene?: SceneStats | null };
 
 export type ToolCtx = {
   teacherId: string;
@@ -640,7 +641,7 @@ const TOOLS: Tool[] = [
   {
     def: {
       name: "html_check",
-      description: "检查草稿：语法、平台约定（成绩上报、禁止外部资源和 localStorage），并在老师浏览器的预览里实际运行，报告脚本运行错误。发布前必须检查并修复所有问题。",
+      description: "检查草稿：语法、平台约定（成绩上报、禁止外部资源和 localStorage），并在老师浏览器的预览里实际运行，报告脚本运行错误；3D 动画还会检查画面是否太空，并给出自查清单（地面分区、氛围动效、标注、步骤、小问）。发布前必须检查并修复所有问题，清单里的 ✗ 也要补上。",
       parameters: obj({ file: STR("文件名") }, ["file"]),
     },
     label: (a) => `检查草稿 ${a.file ?? ""}`,
@@ -655,11 +656,17 @@ const TOOLS: Tool[] = [
           ? { 运行错误: report.errors }
           : { 运行: `在老师浏览器里运行 4 秒，没有报错${report.scores.length ? `；收到成绩上报 ${report.scores.join("、")}` : ""}` }
         : { 运行: "老师现在没有打开预览，只做了静态检查" };
-      const bad = st.problems.length + (report?.errors.length ?? 0);
+      // 3D：画面丰富度 + 自查清单（运行时有错误时先修错误，统计不可靠）
+      const sc = reviewScene(text, report && !report.errors.length ? (report.scene ?? null) : null);
+      const problems = [...st.problems, ...sc.problems];
+      const bad = problems.length + (report?.errors.length ?? 0);
       return {
         file,
         label: `检查草稿 ${file}：${bad ? `${bad} 个问题` : "通过"}`,
-        result: { 行数: info.lines, 大小KB: Math.round(info.size / 1024), 问题: st.problems, 建议: st.tips, ...runtime },
+        result: {
+          行数: info.lines, 大小KB: Math.round(info.size / 1024), 问题: problems, 建议: [...st.tips, ...sc.tips], ...runtime,
+          ...(sc.checklist.length ? { 自查清单: sc.checklist, 说明: "清单里打 ✗ 的项目要补上，再检查一次" } : {}),
+        },
       };
     },
   },

@@ -503,7 +503,7 @@ export function Preview({
         fetch(`/api/assistant/chats/${chatId}/report`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ file, version: v, errors, scores: sc }),
+          body: JSON.stringify({ file, version: v, errors, scores: sc, scene: m.scene ?? null }),
         }).catch(() => {});
       }
     }
