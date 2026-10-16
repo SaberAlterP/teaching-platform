@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs/promises";
 import vm from "vm";
 import { UPLOAD_DIR } from "@/lib/storage";
+import { usesTp3d } from "./scene-check";
 
 // AI 写 HTML 动画用的草稿区：每个对话一个目录，写完预览、检查，再发布成课时里的 HTML 包。
 const ROOT = path.join(UPLOAD_DIR, ".ai");
@@ -78,15 +79,19 @@ export function staticCheck(html: string) {
   if (!/<!doctype html>/i.test(html)) tips.push("缺少 <!DOCTYPE html>");
   if (!/<meta[^>]+name=["']viewport/i.test(html)) tips.push("缺少 viewport meta，手机上会缩得很小");
   if (!/<meta[^>]+charset/i.test(html)) tips.push("缺少 <meta charset=\"utf-8\">，中文可能乱码");
-  if (!/tp:score/.test(html)) tips.push("没有上报成绩（tp:score）；如果有小题，要用 parent.postMessage({ type: 'tp:score', score, max: 100 }, '*')");
-  if (!/tp:complete/.test(html)) tips.push("没有发送 tp:complete（全部完成时发送）");
+  // 用 tp3d 部件库时成绩由 app.quiz / app.task 自动上报
+  const tp3d = usesTp3d(html);
+  if (tp3d && !/["']tp3d["']\s*:\s*["']\/lib\/tp3d\/tp3d\.js["']/.test(html))
+    problems.push('用了 tp3d 部件库，但 importmap 里没有 "tp3d":"/lib/tp3d/tp3d.js"，页面会打不开');
+  if (!tp3d && !/tp:score/.test(html)) tips.push("没有上报成绩（tp:score）；如果有小题，要用 parent.postMessage({ type: 'tp:score', score, max: 100 }, '*')");
+  if (!tp3d && !/tp:complete/.test(html)) tips.push("没有发送 tp:complete（全部完成时发送）");
   if (/\blocalStorage\b|\bsessionStorage\b|document\.cookie|indexedDB/.test(html))
     problems.push("用到了 localStorage/sessionStorage/cookie/indexedDB：平台的沙箱里访问会直接报错，请删掉或用 try/catch 包住");
   const ext = [...html.matchAll(/(?:src|href)\s*=\s*["'](https?:)?\/\/([^"'/]+)[^"']*["']|from\s*["'](https?:)?\/\/([^"'/]+)/gi)]
     .map((m) => m[2] || m[4])
     .filter(Boolean);
   if (ext.length)
-    problems.push(`引用了外部网站资源（${[...new Set(ext)].slice(0, 5).join("、")}）：学生在校园网/国内网络可能打不开，必须全部内嵌；3D 用平台内置的 /lib/three/`);
+    problems.push(`引用了外部网站资源（${[...new Set(ext)].slice(0, 5).join("、")}）：学生在校园网/国内网络可能打不开，必须全部内嵌；3D 用平台内置的 /lib/three/ 和 /lib/tp3d/`);
 
   // 逐个内联脚本做语法检查（行号按整个 HTML 文件计算）
   const re = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;

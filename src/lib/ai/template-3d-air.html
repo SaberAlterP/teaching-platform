@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>全货机主舱集装器装机</title>
+<script type="importmap">{"imports":{"three":"/lib/three/three.module.js","three/addons":"/lib/three/addons.js","tp3d":"/lib/tp3d/tp3d.js"}}</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from "three";
+import * as T from "tp3d";
+
+/* 场景清单
+   区域：机坪（停机位中线、红色安全线、服务车道）、货站（出港打板区雨棚前）、远处塔台
+   设备：全货机（主货舱门在左舷）、主舱升降平台车、牵引车 + 2 个拖斗（PMC 打好的板、AKE 箱）、下货舱传送带车、
+         停在机坪边的 PMC 空板、锥桶、轮挡
+   人物：平台车操作员、监装员、指挥员
+   氛围：云和飞鸟（自动）、发动机风扇慢转、防撞灯闪、远处循环行驶的拖车列、走动的地勤
+*/
+const app = T.createApp({ title: "全货机主舱集装器装机", ground: "apron", size: 220, shadowSize: 70, camera: { pos: [-46, 26, -58], target: [-6, 3, -10] } });
+const { lerp, seg, path, V, AC } = T;
+
+// ---------- 场景 ----------
+const plane = app.add(T.aircraft({ label: "示意全货机  CARGO" }));
+plane.userData.fanSpeed = 0.6;
+const DX = (AC.door.x0 + AC.door.x1) / 2;                 // 主货舱门中心 x
+app.add(T.warehouse({ w: 70, d: 30, h: 14, doors: 6, dock: false, sign: "航空货站  CARGO TERMINAL", color: 0xe7ebef, open: [1, 2, 4] }), -15, 0, -75);
+app.add(T.zone({ w: 40, d: 12, name: "出港打板区", color: "#0e7490" }), -25, 0, -52);
+app.add(T.zone({ w: 16, d: 9, name: "主舱装机作业区", color: "#f59e0b", dashed: true }), DX, 0, -9);
+app.add(T.markLine([[-60, 0], [45, 0]], { color: 0xf2b705, width: 0.3 }));               // 机位中线
+app.add(T.markLine([[-45, -36], [45, -36], [45, 36], [-45, 36], [-45, -36]], { color: 0xd83a3a, width: 0.35 })); // 安全线
+app.add(T.markLine([[-90, -40], [90, -40]], { color: 0xffffff, width: 0.2, dashed: true }));                    // 服务车道
+app.add(T.markLine([[-90, -44], [90, -44]], { color: 0xffffff, width: 0.2, dashed: true }));
+app.add(T.tower({ h: 36 }), 120, 0, -130);
+for (const [x, z] of [[-36, 0], [34, 0], [-9, 33], [-9, -33], [8, 13], [8, -13]]) app.add(T.cone(), x, 0, z);
+for (let i = 0; i < 4; i++) app.add(T.uld({ type: "PMC" }), -48 + i * 0.12, 0.1 + i * 0.1, -30 + i * 0.03);
+app.add(T.beltLoader(), 14, 0, 6.5, -0.2);
+for (let x = -100; x <= 100; x += 25) app.add(T.lamp({ h: 20 }), x, 0, -48);
+
+const loader = app.add(T.loader(), DX, 0, -AC.R - 4.3);
+const operator = app.add(T.person({ vest: 0xfacc15 }), DX + 2.6, 0, -10.5, Math.PI / 2);
+const marshal = app.add(T.person({ vest: 0xf97316 }), DX - 5, 0, -14, Math.PI / 4);
+app.add(T.person({ vest: 0x2563eb, hat: 0xffffff }), DX + 6, 0, -15, Math.PI / 2);
+
+// 牵引车 + 2 个拖斗组成一列（整列沿 x 行驶，车头朝 +x）
+const train = new THREE.Group();
+train.add(T.tug());
+const d1 = T.dolly({ load: "PMC-loaded", code: "PMC 31022 CA" }); d1.position.x = -4.6; train.add(d1);
+const d2 = T.dolly({ load: "AKE", code: "AKE 12188 CA" }); d2.position.x = -8.6; train.add(d2);
+app.add(train);
+const pmcLoad = d1.userData.load;                         // 第一拖斗上打好的板
+const trainPath = path([[-70, -16], [DX + 4.6, -16]]);    // 停下时第一拖斗正好在舱门 x 处
+
+// 氛围：远处服务车道上循环行驶的拖车列、走动的地勤
+const bg = new THREE.Group(); bg.add(T.tug({ color: 0xd83a3a })); const bd = T.dolly({ load: "AKE" }); bd.position.x = -4.6; bg.add(bd);
+app.ambient({
+  traffic: [{ obj: bg, points: [[-110, -42], [110, -42]], speed: 7 }],
+  people: [{ obj: T.person({ vest: 0xfacc15 }), points: [[20, -20], [-20, -20], [-20, -24], [20, -24], [20, -20]], speed: 1.1 }],
+});
+
+// ---------- 讲解步骤 ----------
+const onDolly = V(0, d1.userData.deckY, 0);                // 板在拖斗上的局部位置
+const platLocal = V(0, 0.02, -1.6);                         // 板在平台上的局部位置（平台沿 z，靠近飞机一端是 +z）
+function putOnPlatform() { loader.userData.plat.add(pmcLoad); pmcLoad.position.copy(platLocal); }
+function putOnDolly() { d1.add(pmcLoad); pmcLoad.position.copy(onDolly); }
+app.steps([
+  {
+    title: "认识集装器", dur: 7, cam: { pos: [-36, 6.5, -27], target: [-46, 1.2, -16] },
+    text: "主货舱装 <b>PMC 集装板</b>（3.18 m × 2.44 m，货物打板后罩网），下货舱常用 <b>AKE 集装箱</b>（一侧带斜角，贴合机身弧度）。",
+    enter() { app.label("PMC 集装板（已打板）", pmcLoad, { kind: "big" }); app.label("AKE 集装箱", d2.userData.load, { kind: "big" }); },
+    update() { trainPath.place(train, 0.45); putOnDolly(); loader.userData.setH(0.9); plane.userData.setDoor(1); },
+    ask: { q: "集装箱一侧做成斜角，主要是为了？", options: ["好看", "贴合下货舱的机身弧度，多装货", "方便叉车", "减轻重量"], answer: 1, explain: "下货舱截面是圆弧形，AKE 一侧切角正好贴合机身，充分利用舱容。" },
+  },
+  {
+    title: "拖运到机下", dur: 7, cam: { pos: [-30, 9, -30], target: [-10, 1, -14] },
+    text: "牵引车把打好的板拖到飞机左舷主货舱门下方，<b>机坪限速、绕开发动机危险区</b>，停稳后挂上拖斗锁。",
+    update(p) { trainPath.place(train, lerp(0.45, 1, seg(p, 0, 0.85))); putOnDolly(); loader.userData.setH(0.9); },
+  },
+  {
+    title: "上平台、升平台", dur: 8, cam: { pos: [DX - 12, 7, -22], target: [DX, 3, -8] },
+    text: "板从拖斗滚到平台车后平台上，操作员 <b>先确认板锁到位</b>，再把平台升到与舱门地板齐平（约 4.9 m）。",
+    update(p) {
+      trainPath.place(train, 1);
+      if (p < 0.35) { putOnDolly(); pmcLoad.position.z = lerp(0, 6.5, seg(p, 0, 0.35)); loader.userData.setH(0.9); }
+      else { putOnPlatform(); loader.userData.setH(lerp(0.9, AC.floorY, seg(p, 0.45, 0.95))); }
+      operator.userData.pose(0, -1.2 * seg(p, 0.35, 0.45));
+    },
+    ask: { q: "平台车升到什么高度才能推板入舱？", options: ["越高越好", "与舱门地板齐平", "比舱门低 1 m", "随便"], answer: 1, explain: "平台面必须与舱门地板（门槛）齐平并对接好桥板，板才能平稳推入，避免卡板或损坏舱门。" },
+  },
+  {
+    title: "推入舱内锁定", dur: 8, cam: { pos: [DX - 6, 9, -16], target: [DX + 2, 5, -2] },
+    text: "板经桥板推进舱门，在门区滚珠台上转向，<b>沿滚棒推到指定板位</b>，立起锁扣锁定。监装员核对板号与装载单。",
+    enter() { app.label("核对板号 PMC 31022 CA", marshal, { kind: "ok" }); },
+    update(p) {
+      trainPath.place(train, 1); loader.userData.setH(AC.floorY); putOnPlatform();
+      pmcLoad.position.z = lerp(platLocal.z, 6.2, seg(p, 0.05, 0.6));
+      pmcLoad.visible = p < 0.75;
+    },
+    ask: { q: "集装板推到板位后必须做什么？", options: ["马上关舱门", "立起锁扣锁定板", "取下货网", "称重"], answer: 1, explain: "飞行中会有加减速和颠簸，板必须用地板锁扣锁定，否则会窜动危及飞行安全。" },
+  },
+]);
+
+app.quiz([
+  { q: "（拓展）PMC 集装板的尺寸是？", options: ["3.18 m × 2.44 m", "2.44 m × 1.53 m", "6.06 m × 2.44 m", "1.2 m × 1.0 m"], answer: 0, explain: "PMC 是 96 × 125 英寸（约 3.18 m × 2.44 m）的标准集装板；6.06 m 是 20 尺海运集装箱长度，1.2 m × 1.0 m 是普通托盘。" },
+  { q: "（情境）平台车上升时，下列做法正确的是？", options: ["人站在平台边缘扶板", "确认平台上无人、板已锁定再升", "边升边推板", "让牵引车靠近平台"], answer: 1, explain: "升降中平台上不能站人，板必须锁定，周围车辆人员要远离。" },
+], { weight: 60 });
+
+// 实训：在 3D 画面里点出适合放进下货舱的集装器
+const t = app.task("识别集装器", 40);
+const cands = [d2.userData.load, pmcLoad];
+const box = app.panel("实训", { onShow() { trainPath.place(train, 0.45); putOnDolly(); app.flyTo([-36, 6.5, -27], [-46, 1.2, -16]); } });
+box.innerHTML = "<p>飞机下货舱截面是圆弧形，高度约 1.7 m。请在画面里 <b>点击适合装进下货舱的集装器</b>。</p>";
+let done = false;
+app.pick(cands, (o) => {
+  if (done) return;
+  done = true;
+  const ok = o === d2.userData.load;
+  app.highlight(o, ok ? 0x16a34a : 0xdc2626);
+  t.done(ok ? 100 : 20);
+  box.innerHTML += ok ? "<p style='color:#15803d'>✔ 正确：AKE 带斜角，高 1.63 m，正好放进下货舱。</p>" : "<p style='color:#b91c1c'>✘ 打好的 PMC 板太高，只能装主货舱。下货舱用 AKE 集装箱。</p>";
+});
+</script>
+</body>
+</html>

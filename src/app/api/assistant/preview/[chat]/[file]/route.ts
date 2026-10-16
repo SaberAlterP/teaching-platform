@@ -4,11 +4,16 @@ import { readDraft } from "@/lib/ai/workspace";
 
 // 草稿预览：在 HTML 开头注入一小段脚本，收集运行错误，4 秒后报告给外层页面（AI 助手页），
 // 外层再交给服务器，AI 用 html_check 就能知道动画在浏览器里有没有报错。行号保持不变。
+// 3D 动画还会统计画面丰富度：WebGL 每帧画了多少三角形（任何 three.js 页面都能统计），用了 tp3d 部件库时再取它的统计。
 const REPORTER = `<script>(function(){var E=[];function add(m){if(E.length<20)E.push(String(m).slice(0,300))}
 addEventListener("error",function(e){if(e.target&&e.target!==window&&(e.target.src||e.target.href)){add("资源加载失败："+(e.target.src||e.target.href));return}add((e.message||"脚本错误")+(e.lineno?"（第 "+e.lineno+" 行）":""))},true);
 addEventListener("unhandledrejection",function(e){add("未处理的 Promise 错误："+(e.reason&&e.reason.message||e.reason))});
 var ce=console.error;console.error=function(){add("console.error："+[].map.call(arguments,function(x){return x&&x.message||String(x)}).join(" "));return ce.apply(console,arguments)};
-setTimeout(function(){parent.postMessage({type:"tp:preview-report",errors:E},"*")},4000)})();</script>`.replace(/\n/g, "");
+var S={frames:0,triangles:0,draws:0},ft=0,fd=0;
+function hook(P){if(!P)return;["drawArrays","drawElements","drawArraysInstanced","drawElementsInstanced"].forEach(function(n){var f=P[n];if(!f)return;P[n]=function(m,a,b,c,d){var cnt=n.indexOf("Arrays")>0?b:a,inst=n.indexOf("Instanced")>0?(n.indexOf("Arrays")>0?c:d):1;fd++;if(m===4)ft+=cnt*(inst||1)/3;return f.apply(this,arguments)}})}
+try{hook(window.WebGL2RenderingContext&&WebGL2RenderingContext.prototype);hook(window.WebGLRenderingContext&&WebGLRenderingContext.prototype)}catch(e){}
+function fr(){if(fd){S.frames++;S.triangles=Math.max(S.triangles,Math.round(ft));S.draws=Math.max(S.draws,fd)}ft=0;fd=0;requestAnimationFrame(fr)}requestAnimationFrame(fr);
+setTimeout(function(){var t=null;try{t=window.__tp3d&&window.__tp3d.stats()}catch(e){}S.tp3d=t;parent.postMessage({type:"tp:preview-report",errors:E,scene:S.frames||t?S:null},"*")},4000)})();</script>`.replace(/\n/g, "");
 
 export async function GET(_req: Request, { params }: { params: Promise<{ chat: string; file: string }> }) {
   const u = await getApiUser("TEACHER");

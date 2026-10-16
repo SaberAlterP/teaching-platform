@@ -79,8 +79,10 @@ parent.postMessage({ type: "tp:complete" }, "*");                    // 标记�
 平台内置 three.js（构建时由 `scripts/build-libs.mjs` 生成到 `public/lib/`），HTML 包里可以直接引用，不用自己打包：
 
 ```html
-<script type="importmap">{"imports":{"three":"/lib/three/three.module.js","three/addons":"/lib/three/addons.js"}}</script>
+<script type="importmap">{"imports":{"three":"/lib/three/three.module.js","three/addons":"/lib/three/addons.js","tp3d":"/lib/tp3d/tp3d.js"}}</script>
 ```
+
+`tp3d` 是平台的 3D 部件库（源码在 `lib3d/`）：货车、牵引挂车、面包车、无人配送车、叉车、全货机、集装器、平台车、托盘货、货架、输送机、笼车、人物、厂房、道路、地面分区等现成部件，以及场景外壳、分步讲解播放器、小题和自动成绩上报。用法和两个完整范例写在 AI 助手的「3D场景」「3D范例：航空货站」技能里（`src/lib/ai/skills.ts`、`src/lib/ai/template-3d*.html`）。已上线的动画都在引用它，修改时只能新增部件和参数，不要改已有函数的含义。
 
 ## AI 接口
 
@@ -93,5 +95,6 @@ parent.postMessage({ type: "tp:complete" }, "*");                    // 标记�
 - AI 通过一组工具读写该教师自己的课程（`src/lib/ai/tools.ts`）；新建的课时都是草稿；修改已开放的课时、开放课时前会弹出确认；不能删除课时，看不到学生和成绩。
 - 每一步改动都记录在 `ai_changes`，对话里可以逐条撤销（14 天内）。
 - HTML 动画先写在对话的草稿区，右侧实时预览；预览页会把运行报错交回服务器，AI 检查、修复后再发布到课时。
+- 3D 动画用 tp3d 部件库，按「场景清单 → 搭场景 → 剧情和题目」三阶段做；预览页还会交回画面统计（零件数、部件种类、地面分区、氛围动效、步骤和题目数），`html_check` 据此报“画面太空”并给出自查清单（`src/lib/ai/scene-check.ts`）。
 - “技能”是写给 AI 的规范说明（画风、出题、建课流程、3D 写法等），内置的在 `src/lib/ai/skills.ts`，教师可以在页面上修改或新增。
 - 同一时间最多运行 2 个 AI 任务，其余排队；服务器重启会中断正在运行的任务，点“继续”即可接着做。
