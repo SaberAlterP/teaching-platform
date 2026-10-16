@@ -4,6 +4,7 @@ import { db, schema } from "@/db";
 import { teachesCourse, viewsCourse } from "@/lib/course";
 import { AiError, streamChat, type ApiMessage, type ToolCall } from "./deepseek";
 import { dailyLimitMessage, getAiSettings, recordAiUsage } from "./settings";
+import type { SceneStats } from "./scene-check";
 import { listSkills } from "./skills";
 import { parseArgs, runTool, toolConfirm, TOOL_DEFS, type PreviewReport, type ToolCtx } from "./tools";
 
@@ -57,8 +58,8 @@ export const getJobMessages = (chatId: string) => state.jobs.get(chatId)?.messag
 export const isRunning = (chatId: string) => state.jobs.has(chatId);
 export const markWatched = (chatId: string) => state.watched.set(chatId, Date.now());
 
-export function reportPreview(chatId: string, file: string, version: number, errors: string[], scores: number[]) {
-  state.reports.set(`${chatId}/${file}`, { version, errors: errors.slice(0, 20).map((e) => String(e).slice(0, 500)), scores: scores.slice(0, 10) });
+export function reportPreview(chatId: string, file: string, version: number, errors: string[], scores: number[], scene: SceneStats | null = null) {
+  state.reports.set(`${chatId}/${file}`, { version, errors: errors.slice(0, 20).map((e) => String(e).slice(0, 500)), scores: scores.slice(0, 10), scene });
 }
 
 async function waitForPreview(chatId: string, live: Live, file: string, version: number): Promise<PreviewReport | null> {
@@ -130,6 +131,7 @@ async function systemPrompt(chat: schema.AiChat) {
 - 你的每次改动老师都能撤销；老师撤销后，系统会在下一条消息里告诉你。
 - 工具报错时，读错误信息，修正后再试；同一个错误连续出现 3 次就停下来告诉老师。
 - 一次输出不要太长：写长内容（尤其 HTML）要分段，每次工具调用的内容控制在约 400 行以内。
+- 做 3D 动画：用平台的 tp3d 部件库，按「3D场景」技能的三个阶段做（先在文件开头列场景清单，再搭场景并 html_check，最后写讲解步骤和题目再 html_check）；html_check 报“画面太空”或自查清单里有 ✗ 时，补齐后再发布。
 
 ## 技能
 开始下列任务前，先用 load_skill 读取对应技能的全文并严格遵守（同一对话里读过的不用重复读）：
