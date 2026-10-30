@@ -6,6 +6,7 @@ import { requireStudent } from "@/lib/auth";
 import { studentCanSeeLesson, visibleLessonsFor } from "@/lib/course";
 import { splitTitle } from "@/lib/sections";
 import { loadLessonView } from "@/lib/lesson-data";
+import { LessonShell } from "@/components/LessonToc";
 import { LessonView } from "@/components/modules/LessonView";
 
 export default async function StudentLessonPage({ params }: { params: Promise<{ id: string }> }) {
@@ -39,11 +40,14 @@ export default async function StudentLessonPage({ params }: { params: Promise<{ 
       ) : <span />}
     </nav>
   );
+  const toc = sameCourse.map((l) => ({ id: l.id, title: l.title, section: l.section, href: `/learn/${l.id}` }));
   return (
-    <div className="space-y-4">
-      <Link href={`/learn/course/${lesson.courseId}`} className="mb-4 inline-block text-sm text-slate-500 hover:text-brand-600">← 返回课程</Link>
-      <LessonView title={lesson.title} summary={lesson.summary} courseTitle={course?.title} {...v} backHref={`/learn/course/${lesson.courseId}`} />
-      {pager}
-    </div>
+    <LessonShell lessons={toc} currentId={id}>
+      <div className="space-y-4">
+        <Link href={`/learn/course/${lesson.courseId}`} className="mb-4 inline-block text-sm text-slate-500 hover:text-brand-600">← 返回课程</Link>
+        <LessonView title={lesson.title} summary={lesson.summary} courseTitle={course?.title} {...v} backHref={`/learn/course/${lesson.courseId}`} />
+        {pager}
+      </div>
+    </LessonShell>
   );
 }
